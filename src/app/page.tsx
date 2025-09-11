@@ -1,103 +1,178 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { BridgeInterface } from "@/components/bridge-interface";
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { Button } from "@/components/ui/button";
+import { Coins, ArrowLeft } from "lucide-react";
+import { useWriteMintPsdnMint } from "@/generated";
+import { useAccount } from "wagmi";
+import { parseUnits } from "viem";
+import { motion } from "framer-motion";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [currentView, setCurrentView] = useState<'bridge' | 'mint'>('bridge');
+  const [mintAmount, setMintAmount] = useState("100");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const { address } = useAccount();
+  const { writeContract, isPending, isSuccess, error } = useWriteMintPsdnMint();
+
+  const handleMint = async () => {
+    if (!address || !mintAmount) return;
+    
+    try {
+      const amount = parseUnits(mintAmount, 18);
+      await writeContract({
+        args: [address, amount],
+      });
+    } catch (err) {
+      console.error("Mint failed:", err);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative">
+      {/* Connect Button in top right */}
+      <div className="absolute top-4 right-4 z-10">
+        <ConnectButton />
+      </div>
+
+      {/* Navigation Button */}
+      <div className="absolute top-4 left-4 z-10">
+        {currentView === 'bridge' ? (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex items-center space-x-2"
+            onClick={() => setCurrentView('mint')}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <Coins className="h-4 w-4" />
+            <span>Mint PSDN</span>
+          </Button>
+        ) : (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex items-center space-x-2"
+            onClick={() => setCurrentView('bridge')}
           >
-            Read our docs
-          </a>
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Bridge</span>
+          </Button>
+        )}
+      </div>
+      
+      {/* Content based on current view */}
+      {currentView === 'bridge' ? (
+        <BridgeInterface />
+      ) : (
+        <div className="w-full max-w-md mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="bg-card text-card-foreground border rounded-2xl p-6 space-y-4 shadow-lg relative overflow-hidden"
+          >
+            {/* Futuristic background glow */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-cyan-500/5 rounded-2xl pointer-events-none" />
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent pointer-events-none" />
+            
+            {/* Header */}
+            <div className="text-center space-y-3">
+              <div className="flex items-center justify-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+                  <img 
+                    src="https://psdn.ai/icon.png?07720b992e581016" 
+                    alt="PSDN"
+                    className="w-6 h-6 rounded-full object-cover"
+                  />
+                </div>
+                <div className="text-left">
+                  <h1 className="text-2xl font-bold">Mint PSDN L1</h1>
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-1 text-xs font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                      L1
+                    </span>
+                    <span className="text-sm text-muted-foreground">Poseidon Devnet</span>
+                  </div>
+                </div>
+              </div>
+       
+            </div>
+
+            {/* Mint Form */}
+            <div className="space-y-4">
+              <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                      <img 
+                        src="https://psdn.ai/icon.png?07720b992e581016" 
+                        alt="PSDN"
+                        className="w-4 h-4 rounded-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-foreground font-medium">PSDN L1</div>
+                      <div className="text-muted-foreground text-sm">Poseidon Devnet</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={mintAmount}
+                    onChange={(e) => setMintAmount(e.target.value)}
+                    placeholder="0"
+                    className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                  />
+                  <div className="text-muted-foreground text-sm">Amount to mint</div>
+                </div>
+              </div>
+
+              {/* Mint Button */}
+              <Button
+                onClick={handleMint}
+                disabled={!address || isPending || !mintAmount}
+                className="w-full mt-6"
+                variant="outline"
+              >
+                {isPending ? "Minting..." : isSuccess ? "Minted!" : "Mint PSDN L1"}
+              </Button>
+
+              {/* Status Messages */}
+              {error && (
+                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-destructive text-sm font-medium">
+                    Error: {error.message}
+                  </p>
+                </div>
+              )}
+              
+              {isSuccess && (
+                <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-green-700 dark:text-green-300 text-sm font-medium">
+                    Successfully minted {mintAmount} PSDN L1 tokens!
+                  </span>
+                </div>
+              )}
+
+              {/* Wallet Connection Status */}
+              {!address && (
+                <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <span className="text-amber-700 dark:text-amber-300 text-sm font-medium">
+                    Please connect your wallet to mint tokens
+                  </span>
+                </div>
+              )}
+            </div>
+
+          </motion.div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      )}
+    </main>
   );
 }
