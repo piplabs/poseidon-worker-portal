@@ -1,0 +1,606 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { TokenSelector } from "@/components/token-selector";
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAccount, useReadContract, useWriteContract, useBalance } from "wagmi";
+import { formatUnits, parseUnits } from "viem";
+import { motion } from "framer-motion";
+
+interface Token {
+  symbol: string;
+  name: string;
+  balance: string;
+  logo: string;
+  color: string;
+  layer?: string;
+}
+
+const PSDN_L1_TOKEN: Token = {
+  symbol: "PSDN",
+  name: "Poseidon L1",
+  balance: "0",
+  logo: "https://psdn.ai/icon.png?07720b992e581016",
+  color: "bg-blue-500",
+  layer: "L1",
+};
+
+const PSDN_L2_TOKEN: Token = {
+  symbol: "PSDN",
+  name: "Poseidon Subnet 0",
+  balance: "0",
+  logo: "https://psdn.ai/icon.png?07720b992e581016",
+  color: "bg-purple-500",
+  layer: "L2",
+};
+
+const ETH_L1_TOKEN: Token = {
+  symbol: "ETH",
+  name: "Ethereum L1",
+  balance: "0",
+  logo: "Ξ",
+  color: "bg-gray-500",
+  layer: "L1",
+};
+
+const ETH_L2_TOKEN: Token = {
+  symbol: "ETH",
+  name: "Ethereum Subnet 0",
+  balance: "0",
+  logo: "Ξ",
+  color: "bg-gray-600",
+  layer: "L2",
+};
+
+// This will be updated dynamically with current balances
+const getAvailableL1Tokens = (psdnBalance: bigint | undefined, ethBalance: any): Token[] => {
+  const psdnBalanceStr = psdnBalance ? formatUnits(psdnBalance, 18) : "0.00";
+  const ethBalanceStr = ethBalance ? formatUnits(ethBalance.value, 18) : "0.00";
+  
+  const psdnBalanceFormatted = isNaN(parseFloat(psdnBalanceStr)) ? "0.00" : parseFloat(psdnBalanceStr).toFixed(2);
+  const ethBalanceFormatted = isNaN(parseFloat(ethBalanceStr)) ? "0.00" : parseFloat(ethBalanceStr).toFixed(2);
+  
+  return [
+    { ...PSDN_L1_TOKEN, balance: psdnBalanceFormatted },
+    { ...ETH_L1_TOKEN, balance: ethBalanceFormatted },
+  ];
+};
+
+export function BridgeInterface() {
+  const [fromToken, setFromToken] = useState<Token>(PSDN_L1_TOKEN);
+  const [toToken, setToToken] = useState<Token>(PSDN_L2_TOKEN);
+  const [fromAmount, setFromAmount] = useState("0");
+  const [toAmount, setToAmount] = useState("0");
+  const [bridgeOption, setBridgeOption] = useState<'psdn' | 'eth'>('psdn');
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [showCalculation, setShowCalculation] = useState(false);
+  const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
+
+  const { address } = useAccount();
+  const { writeContract, isPending: isTransactionPending, error: transactionError } = useWriteContract();
+  
+  // Check if Subnet 0 is on top (Subnet 0 -> L1 direction)
+  const isL2ToL1 = fromToken.layer === 'L2';
+  const isL1OnTop = fromToken.layer === 'L1';
+
+  // Update tokens when bridge option changes
+  useEffect(() => {
+    if (isL1OnTop) {
+      if (bridgeOption === 'psdn') {
+        setFromToken(PSDN_L1_TOKEN);
+        setToToken(PSDN_L2_TOKEN);
+      } else {
+        setFromToken(ETH_L1_TOKEN);
+        setToToken(ETH_L2_TOKEN);
+      }
+    }
+  }, [bridgeOption, isL1OnTop]);
+  
+  // Read PSDN token balance
+  const { data: psdnBalance, refetch: refetchPsdnBalance } = useReadContract({
+    address: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
+    abi: [
+      {
+        inputs: [{ name: "account", type: "address" }],
+        name: "balanceOf",
+        outputs: [{ name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+      },
+    ],
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  });
+
+  // Read L2 PSDN token balance
+  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadContract({
+    address: "0x30f627A3de293d408E89D4C3E40a41bbF638bC36",
+    abi: [
+      {
+        inputs: [{ name: "account", type: "address" }],
+        name: "balanceOf",
+        outputs: [{ name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+      },
+    ],
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address,
+    },
+    chainId: 11711, // L2 chain ID
+  });
+
+  // Read ETH balance (native token)
+  const { data: ethBalance, refetch: refetchEthBalance } = useBalance({
+    address: address,
+  });
+
+  // Read current allowance for bridge contract
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+    address: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
+    abi: [
+      {
+        inputs: [
+          { name: "owner", type: "address" },
+          { name: "spender", type: "address" }
+        ],
+        name: "allowance",
+        outputs: [{ name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+      },
+    ],
+    functionName: "allowance",
+    args: address ? [address, "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae"] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  });
+
+  // Update PSDN L1 token balance when balance changes
+  useEffect(() => {
+    if (psdnBalance !== undefined) {
+      const formattedBalance = formatUnits(psdnBalance, 18);
+      const balance = parseFloat(formattedBalance);
+      setFromToken(prev => ({
+        ...prev,
+        balance: isNaN(balance) ? "0.00" : balance.toFixed(2)
+      }));
+    }
+  }, [psdnBalance]);
+
+  // Update PSDN L2 token balance when balance changes
+  useEffect(() => {
+    if (psdnL2Balance !== undefined) {
+      const formattedBalance = formatUnits(psdnL2Balance, 18);
+      const balance = parseFloat(formattedBalance);
+      setToToken(prev => ({
+        ...prev,
+        balance: isNaN(balance) ? "0.00" : balance.toFixed(2)
+      }));
+    }
+  }, [psdnL2Balance]);
+
+  // Update ETH token balance when balance changes
+  useEffect(() => {
+    if (ethBalance !== undefined) {
+      const formattedBalance = formatUnits(ethBalance.value, 18);
+      const balance = parseFloat(formattedBalance);
+      const balanceStr = isNaN(balance) ? "0.00" : balance.toFixed(2);
+      
+      // Update the current fromToken if it's ETH
+      setFromToken(prev => prev.symbol === 'ETH' ? {
+        ...prev,
+        balance: balanceStr
+      } : prev);
+    }
+  }, [ethBalance]);
+
+  // Poll balances every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Refetch all balances
+      refetchPsdnBalance();
+      refetchPsdnL2Balance();
+      // Note: ethBalance from useBalance doesn't have a refetch method, 
+      // but it should automatically update when the account changes
+    }, 10000); // 10 seconds
+
+    return () => clearInterval(interval);
+  }, [refetchPsdnBalance, refetchPsdnL2Balance]);
+
+  const handleSwap = async () => {
+    if (isSwapping) return;
+    
+    setIsSwapping(true);
+    setShowCalculation(true);
+    
+    // Animate the swap with a delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const temp = fromToken;
+    setFromToken(toToken);
+    setToToken(temp);
+    
+    // Reset swap state
+    setTimeout(() => {
+      setIsSwapping(false);
+      setShowCalculation(false);
+    }, 600);
+  };
+
+  const handleFromAmountChange = (amount: string) => {
+    setFromAmount(amount);
+    
+    // Simple conversion logic (1 PSDN = 1 UNKNOWN for demo)
+    const numAmount = parseFloat(amount);
+    if (!isNaN(numAmount)) {
+      const convertedAmount = (numAmount * 1).toFixed(2);
+      setToAmount(convertedAmount);
+    } else {
+      setToAmount("0");
+    }
+  };
+
+  const handleToAmountChange = (amount: string) => {
+    setToAmount(amount);
+    
+    // Reverse conversion logic
+    const numAmount = parseFloat(amount);
+    if (!isNaN(numAmount)) {
+      const convertedAmount = (numAmount / 1).toFixed(2);
+      setFromAmount(convertedAmount);
+    } else {
+      setFromAmount("0");
+    }
+  };
+
+  const handleTokenSelect = (selectedToken: Token) => {
+    // Update the fromToken with the current balance
+    const updatedFromToken = {
+      ...selectedToken,
+      balance: selectedToken.symbol === 'PSDN' 
+        ? (psdnBalance ? formatUnits(psdnBalance, 18) : "0.00")
+        : (ethBalance ? formatUnits(ethBalance.value, 18) : "0.00")
+    };
+    
+    // Format the balance to 2 decimal places
+    const balance = parseFloat(updatedFromToken.balance);
+    updatedFromToken.balance = isNaN(balance) ? "0.00" : balance.toFixed(2);
+    
+    setFromToken(updatedFromToken);
+    
+    // Auto-update the toToken based on the selected fromToken
+    if (selectedToken.layer === 'L1') {
+      // If L1 is selected, set corresponding L2 token
+      if (selectedToken.symbol === 'PSDN') {
+        setToToken(PSDN_L2_TOKEN);
+      } else if (selectedToken.symbol === 'ETH') {
+        setToToken(ETH_L2_TOKEN);
+      }
+    } else {
+      // If L2 is selected, set corresponding L1 token
+      if (selectedToken.symbol === 'PSDN') {
+        setToToken(PSDN_L1_TOKEN);
+      } else if (selectedToken.symbol === 'ETH') {
+        setToToken(ETH_L1_TOKEN);
+      }
+    }
+    
+    setIsTokenSelectorOpen(false);
+  };
+
+
+  const handleTransact = async () => {
+    if (!address || !fromAmount || parseFloat(fromAmount) <= 0) {
+      return;
+    }
+
+    try {
+      const amount = parseUnits(fromAmount, 18);
+      const bridgeAddress = "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae";
+
+      if (fromToken.symbol === 'ETH') {
+        // For ETH, use depositETH call
+        await writeContract({
+          address: bridgeAddress,
+          abi: [
+            {
+              inputs: [
+                { name: "_to", type: "address" },
+                { name: "_minGasLimit", type: "uint32" },
+                { name: "_extraData", type: "bytes" }
+              ],
+              name: "depositETH",
+              outputs: [],
+              stateMutability: "payable",
+              type: "function",
+            },
+          ],
+          functionName: "depositETH",
+          args: [
+            address, // recipient address
+            200000, // min gas limit
+            "0x" // extra data (empty)
+          ],
+          value: amount, // ETH amount to deposit
+        });
+
+        // Refresh ETH balance after successful transaction
+        refetchPsdnBalance();
+        refetchPsdnL2Balance();
+      } else {
+        // For PSDN, use the existing ERC20 flow
+        // Check if we need to approve first
+        const needsApproval = !currentAllowance || currentAllowance < amount;
+        
+        if (needsApproval) {
+          // Approve max amount to avoid future approvals
+          await writeContract({
+            address: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46", // PSDN token address
+            abi: [
+              {
+                inputs: [
+                  { name: "spender", type: "address" },
+                  { name: "amount", type: "uint256" }
+                ],
+                name: "approve",
+                outputs: [{ name: "", type: "bool" }],
+                stateMutability: "nonpayable",
+                type: "function",
+              },
+            ],
+            functionName: "approve",
+            args: [bridgeAddress, BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")], // Max uint256
+          });
+          
+          // Refresh allowance after approval
+          refetchAllowance();
+        }
+        
+        // Then call depositERC20To on the Bridge contract
+        await writeContract({
+          address: bridgeAddress,
+          abi: [
+            {
+              inputs: [
+                { name: "_l1Token", type: "address" },
+                { name: "_l2Token", type: "address" },
+                { name: "_to", type: "address" },
+                { name: "_amount", type: "uint256" },
+                { name: "_minGasLimit", type: "uint32" },
+                { name: "_extraData", type: "bytes" }
+              ],
+              name: "depositERC20To",
+              outputs: [],
+              stateMutability: "nonpayable",
+              type: "function",
+            },
+          ],
+          functionName: "depositERC20To",
+          args: [
+            "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46", // L1 token (PSDN)
+            "0x30f627A3de293d408E89D4C3E40a41bbF638bC36", // L2 token (PSDN Subnet 0)
+            address, // recipient address
+            amount, // amount to deposit
+            200000, // min gas limit
+            "0x" // extra data (empty)
+          ],
+        });
+        
+        // Refresh balance and allowance after successful transaction
+        refetchPsdnBalance();
+        refetchPsdnL2Balance();
+        refetchAllowance();
+      }
+    } catch (error) {
+      console.error("Transaction failed:", error);
+    }
+  };
+
+  return (
+    <div className="w-full max-w-md mx-auto p-2">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className={`bg-card text-card-foreground border rounded-2xl p-6 space-y-4 shadow-lg relative ${
+          isL1OnTop 
+            ? 'ring-2 ring-blue-400/80 ring-opacity-80 shadow-blue-400/30 shadow-2xl' 
+            : 'ring-2 ring-purple-400/80 ring-opacity-80 shadow-purple-400/30 shadow-2xl'
+        }`}
+        style={{
+          background: isL1OnTop 
+            ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+            : 'linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%)',
+          boxShadow: isL1OnTop 
+            ? '0 0 60px rgba(59, 130, 246, 0.7), 0 0 120px rgba(147, 51, 234, 0.5), 0 0 180px rgba(59, 130, 246, 0.3), inset 0 0 40px rgba(59, 130, 246, 0.3)' 
+            : '0 0 60px rgba(147, 51, 234, 0.7), 0 0 120px rgba(59, 130, 246, 0.5), 0 0 180px rgba(147, 51, 234, 0.3), inset 0 0 40px rgba(147, 51, 234, 0.3)',
+          transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+      >
+        {/* Neon gradient border effect */}
+        <div 
+          className="absolute inset-0 rounded-2xl pointer-events-none z-0"
+          style={{
+            background: isL1OnTop 
+              ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(147, 51, 234, 0.9) 100%)' 
+              : 'linear-gradient(135deg, rgba(147, 51, 234, 0.9) 0%, rgba(59, 130, 246, 0.9) 100%)',
+            borderRadius: '1rem',
+            padding: '4px',
+            mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            maskComposite: 'xor',
+            WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMaskComposite: 'xor',
+            boxShadow: isL1OnTop 
+              ? '0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(147, 51, 234, 0.4), 0 0 60px rgba(59, 130, 246, 0.2)' 
+              : '0 0 20px rgba(147, 51, 234, 0.6), 0 0 40px rgba(59, 130, 246, 0.4), 0 0 60px rgba(147, 51, 234, 0.2)',
+            transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+        />
+        
+
+        {/* Futuristic background glow */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-cyan-500/5 rounded-2xl pointer-events-none" />
+        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent pointer-events-none" />
+        {/* From Token Card */}
+        <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3 relative z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                {fromToken.logo.startsWith('http') ? (
+                  <img 
+                    src={fromToken.logo} 
+                    alt={fromToken.symbol}
+                    className="w-4 h-4 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-white font-bold text-xs">{fromToken.logo}</span>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-foreground font-medium">{fromToken.name}</span>
+                  {fromToken.layer && (
+                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                      fromToken.layer === 'L1' 
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    }`}>
+                      {fromToken.layer}
+                    </span>
+                  )}
+                </div>
+                <div className="text-muted-foreground text-sm">{fromToken.balance} {fromToken.symbol}</div>
+              </div>
+            </div>
+            <Button
+              onClick={() => setIsTokenSelectorOpen(true)}
+              className="h-10 w-10 p-0 bg-background/50 border border-input/20 rounded-lg hover:bg-background/80 hover:border-input/40 transition-all duration-200"
+            >
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            </Button>
+          </div>
+          
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={fromAmount}
+              onChange={(e) => {
+                handleFromAmountChange(e.target.value);
+              }}
+              placeholder="0"
+              className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+              disabled={false}
+            />
+            <div className="text-muted-foreground text-sm">Amount to bridge</div>
+          </div>
+        </div>
+
+        {/* Swap Button */}
+        <div className="flex justify-center relative z-10">
+          <Button
+            onClick={handleSwap}
+            className="rounded-full p-2 h-10 w-10"
+            variant="outline"
+          >
+            <ChevronDown className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* To Token Card */}
+        <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3 relative z-10">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
+              {toToken.logo.startsWith('http') ? (
+                <img 
+                  src={toToken.logo} 
+                  alt={toToken.symbol}
+                  className="w-4 h-4 rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-white font-bold text-xs">{toToken.logo}</span>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-foreground font-medium">{toToken.name}</span>
+                {toToken.layer && (
+                  <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                    toToken.layer === 'L1' 
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                      : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                  }`}>
+                    {toToken.layer}
+                  </span>
+                )}
+              </div>
+              <div className="text-muted-foreground text-sm">{toToken.balance} {toToken.symbol}</div>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={toAmount}
+              onChange={(e) => handleToAmountChange(e.target.value)}
+              placeholder="0"
+              className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+              disabled={false}
+            />
+            <div className="text-muted-foreground text-sm">You will receive</div>
+          </div>
+        </div>
+
+        {/* Action Button */}
+        <div className="relative z-10">
+        <Button
+          className="w-full mt-6"
+          variant="outline"
+          onClick={isL2ToL1 ? undefined : handleTransact}
+          disabled={isL2ToL1 || !address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
+        >
+          {isL2ToL1 ? "WIP" : isTransactionPending ? "Processing..." : "Transact"}
+        </Button>
+        </div>
+
+        {/* Subnet 0 -> L1 Warning */}
+        {isL2ToL1 && (
+          <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg relative z-10">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <span className="text-amber-700 dark:text-amber-300 text-sm font-medium">
+              Subnet 0 → L1 bridging is work in progress
+            </span>
+          </div>
+        )}
+
+
+        {/* Error Display */}
+        {transactionError && (
+          <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg relative z-10">
+            <p className="text-destructive text-sm font-medium">
+              Error: {transactionError.message}
+            </p>
+          </div>
+        )}
+
+        {/* Token Selector */}
+        <TokenSelector
+          selectedToken={fromToken}
+          onTokenSelect={handleTokenSelect}
+          tokens={getAvailableL1Tokens(psdnBalance, ethBalance)}
+          isOpen={isTokenSelectorOpen}
+          onClose={() => setIsTokenSelectorOpen(false)}
+          title="Select a token"
+        />
+      </motion.div>
+    </div>
+  );
+}
