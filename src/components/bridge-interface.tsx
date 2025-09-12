@@ -4,9 +4,16 @@ import { useState, useEffect } from "react";
 import { TokenSelector } from "@/components/token-selector";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAccount, useReadContract, useWriteContract, useBalance } from "wagmi";
+import { useAccount, useBalance, useReadContract } from "wagmi";
 import { formatUnits, parseUnits } from "viem";
 import { motion } from "framer-motion";
+import { 
+  useReadMintPsdnBalanceOf,
+  useReadMintPsdnAllowance,
+  useWriteMintPsdnApprove,
+  useWriteBridgeBridgeEthTo,
+  useWriteBridgeDepositErc20To
+} from "@/generated";
 
 interface Token {
   symbol: string;
@@ -82,7 +89,11 @@ export function BridgeInterface() {
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
 
   const { address } = useAccount();
-  const { writeContract, isPending: isTransactionPending, error: transactionError } = useWriteContract();
+  
+  // Write hooks for transactions
+  const { writeContract: writeApprove, isPending: isApprovePending, error: approveError } = useWriteMintPsdnApprove();
+  const { writeContract: writeBridgeEth, isPending: isBridgeEthPending, error: bridgeEthError } = useWriteBridgeBridgeEthTo();
+  const { writeContract: writeDepositErc20, isPending: isDepositErc20Pending, error: depositErc20Error } = useWriteBridgeDepositErc20To();
   
   // Check if Subnet 0 is on top (Subnet 0 -> L1 direction)
   const isL2ToL1 = fromToken.layer === 'L2';
@@ -102,25 +113,14 @@ export function BridgeInterface() {
   }, [bridgeOption, isL1OnTop]);
   
   // Read PSDN token balance
-  const { data: psdnBalance, refetch: refetchPsdnBalance } = useReadContract({
-    address: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
-    abi: [
-      {
-        inputs: [{ name: "account", type: "address" }],
-        name: "balanceOf",
-        outputs: [{ name: "", type: "uint256" }],
-        stateMutability: "view",
-        type: "function",
-      },
-    ],
-    functionName: "balanceOf",
+  const { data: psdnBalance, refetch: refetchPsdnBalance } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
     query: {
       enabled: !!address,
     },
   });
 
-  // Read L2 PSDN token balance
+  // Read L2 PSDN token balance (keeping raw call for L2 chain)
   const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadContract({
     address: "0x30f627A3de293d408E89D4C3E40a41bbF638bC36",
     abi: [
@@ -146,21 +146,7 @@ export function BridgeInterface() {
   });
 
   // Read current allowance for bridge contract
-  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
-    address: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
-    abi: [
-      {
-        inputs: [
-          { name: "owner", type: "address" },
-          { name: "spender", type: "address" }
-        ],
-        name: "allowance",
-        outputs: [{ name: "", type: "uint256" }],
-        stateMutability: "view",
-        type: "function",
-      },
-    ],
-    functionName: "allowance",
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadMintPsdnAllowance({
     args: address ? [address, "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae"] : undefined,
     query: {
       enabled: !!address,
@@ -308,26 +294,10 @@ export function BridgeInterface() {
 
     try {
       const amount = parseUnits(fromAmount, 18);
-      const bridgeAddress = "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae";
 
       if (fromToken.symbol === 'ETH') {
-        // For ETH, use depositETH call
-        await writeContract({
-          address: bridgeAddress,
-          abi: [
-            {
-              inputs: [
-                { name: "_to", type: "address" },
-                { name: "_minGasLimit", type: "uint32" },
-                { name: "_extraData", type: "bytes" }
-              ],
-              name: "depositETH",
-              outputs: [],
-              stateMutability: "payable",
-              type: "function",
-            },
-          ],
-          functionName: "depositETH",
+        // For ETH, use bridgeEthTo call
+        await writeBridgeEth({
           args: [
             address, // recipient address
             200000, // min gas limit
@@ -346,22 +316,8 @@ export function BridgeInterface() {
         
         if (needsApproval) {
           // Approve max amount to avoid future approvals
-          await writeContract({
-            address: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46", // PSDN token address
-            abi: [
-              {
-                inputs: [
-                  { name: "spender", type: "address" },
-                  { name: "amount", type: "uint256" }
-                ],
-                name: "approve",
-                outputs: [{ name: "", type: "bool" }],
-                stateMutability: "nonpayable",
-                type: "function",
-              },
-            ],
-            functionName: "approve",
-            args: [bridgeAddress, BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")], // Max uint256
+          await writeApprove({
+            args: ["0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae", BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")], // Max uint256
           });
           
           // Refresh allowance after approval
@@ -369,25 +325,7 @@ export function BridgeInterface() {
         }
         
         // Then call depositERC20To on the Bridge contract
-        await writeContract({
-          address: bridgeAddress,
-          abi: [
-            {
-              inputs: [
-                { name: "_l1Token", type: "address" },
-                { name: "_l2Token", type: "address" },
-                { name: "_to", type: "address" },
-                { name: "_amount", type: "uint256" },
-                { name: "_minGasLimit", type: "uint32" },
-                { name: "_extraData", type: "bytes" }
-              ],
-              name: "depositERC20To",
-              outputs: [],
-              stateMutability: "nonpayable",
-              type: "function",
-            },
-          ],
-          functionName: "depositERC20To",
+        await writeDepositErc20({
           args: [
             "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46", // L1 token (PSDN)
             "0x30f627A3de293d408E89D4C3E40a41bbF638bC36", // L2 token (PSDN Subnet 0)
@@ -568,9 +506,9 @@ export function BridgeInterface() {
           className="w-full mt-6"
           variant="outline"
           onClick={isL2ToL1 ? undefined : handleTransact}
-          disabled={isL2ToL1 || !address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
+          disabled={isL2ToL1 || !address || !fromAmount || parseFloat(fromAmount) <= 0 || isApprovePending || isBridgeEthPending || isDepositErc20Pending}
         >
-          {isL2ToL1 ? "WIP" : isTransactionPending ? "Processing..." : "Transact"}
+          {isL2ToL1 ? "WIP" : (isApprovePending || isBridgeEthPending || isDepositErc20Pending) ? "Processing..." : "Transact"}
         </Button>
         </div>
 
@@ -586,10 +524,10 @@ export function BridgeInterface() {
 
 
         {/* Error Display */}
-        {transactionError && (
+        {(approveError || bridgeEthError || depositErc20Error) && (
           <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg relative z-10">
             <p className="text-destructive text-sm font-medium">
-              Error: {transactionError.message}
+              Error: {(approveError || bridgeEthError || depositErc20Error)?.message}
             </p>
           </div>
         )}
