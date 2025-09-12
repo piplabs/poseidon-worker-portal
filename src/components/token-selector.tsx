@@ -97,7 +97,6 @@ export function TokenSelector({
 
           {/* Token List */}
           <div className="px-6 pb-6">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">Tokens by 24H volume</h3>
             <div className="max-h-64 overflow-y-auto space-y-1">
               {filteredTokens.map((token, index) => (
                 <button

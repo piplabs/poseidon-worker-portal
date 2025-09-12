@@ -2,7 +2,7 @@ import { defineChain } from "viem";
 
 export const psdnDevnet = defineChain({
   id: 1518, 
-  name: "Poseidon Devnet L1",
+  name: "Story Poseidon Devnet",
   nativeCurrency: {
     decimals: 18,
     name: "Ethereum",
