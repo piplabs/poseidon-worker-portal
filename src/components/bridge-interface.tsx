@@ -54,7 +54,10 @@ const ETH_L2_TOKEN: Token = {
 };
 
 // This will be updated dynamically with current balances
-const getAvailableL1Tokens = (psdnBalance: bigint | undefined, ethBalance: any): Token[] => {
+const getAvailableL1Tokens = (
+  psdnBalance: bigint | undefined,
+  ethBalance: { value: bigint } | undefined
+): Token[] => {
   const psdnBalanceStr = psdnBalance ? formatUnits(psdnBalance, 18) : "0.00";
   const ethBalanceStr = ethBalance ? formatUnits(ethBalance.value, 18) : "0.00";
   
