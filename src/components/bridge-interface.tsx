@@ -290,9 +290,23 @@ export function BridgeInterface() {
     }
   };
 
+  const handleFromAmountBlur = () => {
+    const numAmount = parseFloat(fromAmount);
+    if (!isNaN(numAmount) && fromAmount !== '') {
+      setFromAmount(numAmount.toFixed(2));
+    }
+  };
+
+  const handleToAmountBlur = () => {
+    const numAmount = parseFloat(toAmount);
+    if (!isNaN(numAmount) && toAmount !== '') {
+      setToAmount(numAmount.toFixed(2));
+    }
+  };
+
   const handleTokenSelect = (selectedToken: Token) => {
     // Update the fromToken with the current balance
-    let updatedFromToken = { ...selectedToken };
+    const updatedFromToken = { ...selectedToken };
     
     // Get the correct balance based on token type and layer
     if (selectedToken.symbol === 'PSDN') {
@@ -502,6 +516,7 @@ export function BridgeInterface() {
               onChange={(e) => {
                 handleFromAmountChange(e.target.value);
               }}
+              onBlur={handleFromAmountBlur}
               placeholder="0"
               className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
               disabled={false}
@@ -557,6 +572,7 @@ export function BridgeInterface() {
               type="text"
               value={toAmount}
               onChange={(e) => handleToAmountChange(e.target.value)}
+              onBlur={handleToAmountBlur}
               placeholder="0"
               className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
               disabled={false}
