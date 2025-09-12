@@ -138,7 +138,7 @@ export default function Home() {
                 className="w-full mt-6"
                 variant="outline"
               >
-                {isPending ? "Minting..." : isSuccess ? "Minted!" : "Mint PSDN L1"}
+                {isPending ? "Minting..." : isSuccess ? "Minted!" : "Mint"}
               </Button>
 
               {/* Status Messages */}
