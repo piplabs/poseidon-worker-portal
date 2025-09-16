@@ -11,7 +11,7 @@ interface Token {
   balance: string;
   logo: string;
   color: string;
-  layer?: string;
+  layer?: "L1" | "L2";
 }
 
 interface TokenSelectorProps {
