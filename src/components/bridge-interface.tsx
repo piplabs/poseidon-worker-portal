@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { TokenSelector } from "@/components/token-selector";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,15 +15,36 @@ import {
   useWriteBridgeDepositErc20To
 } from "@/generated";
 
+// Constants
+const CHAIN_IDS = {
+  L1: 1518,
+  L2: 11711,
+} as const;
+
+const CONTRACT_ADDRESSES = {
+  PSDN_L1: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
+  PSDN_L2: "0x30f627A3de293d408E89D4C3E40a41bbF638bC36",
+  BRIDGE: "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae",
+} as const;
+
+const TOKEN_DECIMALS = 18;
+const POLLING_INTERVAL = 10000; // 10 seconds
+const MAX_UINT256 = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+const MIN_GAS_LIMIT = 200000;
+
+// Types
 interface Token {
   symbol: string;
   name: string;
   balance: string;
   logo: string;
   color: string;
-  layer?: string;
+  layer?: "L1" | "L2";
 }
 
+type BridgeOption = 'psdn' | 'eth';
+
+// Token definitions
 const PSDN_L1_TOKEN: Token = {
   symbol: "PSDN",
   name: "Poseidon L1",
@@ -60,61 +81,57 @@ const ETH_L2_TOKEN: Token = {
   layer: "L2",
 };
 
-// This will be updated dynamically with current balances
+// Utility functions
+const formatBalance = (balance: bigint | undefined): string => {
+  if (!balance) return "0.00";
+  const formatted = formatUnits(balance, TOKEN_DECIMALS);
+  const parsed = parseFloat(formatted);
+  return isNaN(parsed) ? "0.00" : parsed.toFixed(2);
+};
+
+const formatBalanceFromValue = (balance: { value: bigint } | undefined): string => {
+  if (!balance) return "0.00";
+  return formatBalance(balance.value);
+};
+
+// Token helper functions
 const getAvailableL1Tokens = (
   psdnBalance: bigint | undefined,
   ethBalance: { value: bigint } | undefined
-): Token[] => {
-  const psdnBalanceStr = psdnBalance ? formatUnits(psdnBalance, 18) : "0.00";
-  const ethBalanceStr = ethBalance ? formatUnits(ethBalance.value, 18) : "0.00";
-  
-  const psdnBalanceFormatted = isNaN(parseFloat(psdnBalanceStr)) ? "0.00" : parseFloat(psdnBalanceStr).toFixed(2);
-  const ethBalanceFormatted = isNaN(parseFloat(ethBalanceStr)) ? "0.00" : parseFloat(ethBalanceStr).toFixed(2);
-  
-  return [
-    { ...PSDN_L1_TOKEN, balance: psdnBalanceFormatted },
-    { ...ETH_L1_TOKEN, balance: ethBalanceFormatted },
-  ];
-};
+): Token[] => [
+  { ...PSDN_L1_TOKEN, balance: formatBalance(psdnBalance) },
+  { ...ETH_L1_TOKEN, balance: formatBalanceFromValue(ethBalance) },
+];
 
-// Get available L2 tokens with current balances
 const getAvailableL2Tokens = (
   psdnL2Balance: bigint | undefined,
   ethL2Balance: { value: bigint } | undefined
-): Token[] => {
-  const psdnL2BalanceStr = psdnL2Balance ? formatUnits(psdnL2Balance, 18) : "0.00";
-  const ethL2BalanceStr = ethL2Balance ? formatUnits(ethL2Balance.value, 18) : "0.00";
-  
-  const psdnL2BalanceFormatted = isNaN(parseFloat(psdnL2BalanceStr)) ? "0.00" : parseFloat(psdnL2BalanceStr).toFixed(2);
-  const ethL2BalanceFormatted = isNaN(parseFloat(ethL2BalanceStr)) ? "0.00" : parseFloat(ethL2BalanceStr).toFixed(2);
-  
-  return [
-    { ...PSDN_L2_TOKEN, balance: psdnL2BalanceFormatted },
-    { ...ETH_L2_TOKEN, balance: ethL2BalanceFormatted },
-  ];
-};
+): Token[] => [
+  { ...PSDN_L2_TOKEN, balance: formatBalance(psdnL2Balance) },
+  { ...ETH_L2_TOKEN, balance: formatBalanceFromValue(ethL2Balance) },
+];
 
 export function BridgeInterface() {
+  // State
   const [fromToken, setFromToken] = useState<Token>(PSDN_L1_TOKEN);
   const [toToken, setToToken] = useState<Token>(PSDN_L2_TOKEN);
   const [fromAmount, setFromAmount] = useState("0");
   const [toAmount, setToAmount] = useState("0");
-  const [bridgeOption, setBridgeOption] = useState<'psdn' | 'eth'>('psdn');
+  const [bridgeOption, setBridgeOption] = useState<BridgeOption>('psdn');
   const [isSwapping, setIsSwapping] = useState(false);
-  const [isCalculating, setIsCalculating] = useState(false);
   const [showCalculation, setShowCalculation] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
 
   const { address } = useAccount();
   
-  // Write hooks for transactions
+  // Computed values
+  const isL2ToL1 = fromToken.layer === 'L2';
+  const isL1OnTop = fromToken.layer === 'L1';
+  
+  // Transaction hooks
   const { writeContract: writeApprove, isPending: isApprovePending, error: approveError } = useWriteMintPsdnApprove();
   const { writeContract: writeBridgeEth, isPending: isBridgeEthPending, error: bridgeEthError } = useWriteBridgeBridgeEthTo();
   const { writeContract: writeDepositErc20, isPending: isDepositErc20Pending, error: depositErc20Error } = useWriteBridgeDepositErc20To();
-  
-  // Check if Subnet 0 is on top (Subnet 0 -> L1 direction)
-  const isL2ToL1 = fromToken.layer === 'L2';
-  const isL1OnTop = fromToken.layer === 'L1';
 
   // Update tokens when bridge option changes
   useEffect(() => {
@@ -129,17 +146,14 @@ export function BridgeInterface() {
     }
   }, [bridgeOption, isL1OnTop]);
   
-  // Read PSDN token balance
+  // Balance hooks
   const { data: psdnBalance, refetch: refetchPsdnBalance } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
-    query: {
-      enabled: !!address,
-    },
+    query: { enabled: !!address },
   });
 
-  // Read L2 PSDN token balance (keeping raw call for L2 chain)
   const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadContract({
-    address: "0x30f627A3de293d408E89D4C3E40a41bbF638bC36",
+    address: CONTRACT_ADDRESSES.PSDN_L2,
     abi: [
       {
         inputs: [{ name: "account", type: "address" }],
@@ -151,100 +165,74 @@ export function BridgeInterface() {
     ],
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: {
-      enabled: !!address,
-    },
-    chainId: 11711, // L2 chain ID
+    query: { enabled: !!address },
+    chainId: CHAIN_IDS.L2,
   });
 
-  // Read ETH balance (native token) for L1
   const { data: ethBalance, refetch: refetchEthBalance } = useBalance({
-    address: address,
-    chainId: 1518, // L1 chain ID
+    address,
+    chainId: CHAIN_IDS.L1,
   });
 
-  // Read ETH balance for L2 (Subnet 0)
   const { data: ethL2Balance, refetch: refetchEthL2Balance } = useBalance({
-    address: address,
-    chainId: 11711, // L2 chain ID
+    address,
+    chainId: CHAIN_IDS.L2,
   });
 
-  // Read current allowance for bridge contract
   const { data: currentAllowance, refetch: refetchAllowance } = useReadMintPsdnAllowance({
-    args: address ? [address, "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae"] : undefined,
-    query: {
-      enabled: !!address,
-    },
+    args: address ? [address, CONTRACT_ADDRESSES.BRIDGE] : undefined,
+    query: { enabled: !!address },
   });
 
-  // Update PSDN L1 token balance when balance changes
+  // Balance update effects
   useEffect(() => {
     if (psdnBalance !== undefined) {
-      const formattedBalance = formatUnits(psdnBalance, 18);
-      const balance = parseFloat(formattedBalance);
-      setFromToken(prev => ({
-        ...prev,
-        balance: isNaN(balance) ? "0.00" : balance.toFixed(2)
-      }));
+      const balanceStr = formatBalance(psdnBalance);
+      setFromToken(prev => ({ ...prev, balance: balanceStr }));
     }
   }, [psdnBalance]);
 
-  // Update PSDN L2 token balance when balance changes
   useEffect(() => {
     if (psdnL2Balance !== undefined) {
-      const formattedBalance = formatUnits(psdnL2Balance, 18);
-      const balance = parseFloat(formattedBalance);
-      setToToken(prev => ({
-        ...prev,
-        balance: isNaN(balance) ? "0.00" : balance.toFixed(2)
-      }));
+      const balanceStr = formatBalance(psdnL2Balance);
+      setToToken(prev => ({ ...prev, balance: balanceStr }));
     }
   }, [psdnL2Balance]);
 
-  // Update ETH token balance when balance changes
   useEffect(() => {
     if (ethBalance !== undefined) {
-      const formattedBalance = formatUnits(ethBalance.value, 18);
-      const balance = parseFloat(formattedBalance);
-      const balanceStr = isNaN(balance) ? "0.00" : balance.toFixed(2);
-      
-      // Update the current fromToken if it's ETH
-      setFromToken(prev => prev.symbol === 'ETH' ? {
-        ...prev,
-        balance: balanceStr
-      } : prev);
+      const balanceStr = formatBalanceFromValue(ethBalance);
+      setFromToken(prev => 
+        prev.symbol === 'ETH' ? { ...prev, balance: balanceStr } : prev
+      );
     }
   }, [ethBalance]);
 
-  // Update ETH L2 token balance when balance changes
   useEffect(() => {
     if (ethL2Balance !== undefined) {
-      const formattedBalance = formatUnits(ethL2Balance.value, 18);
-      const balance = parseFloat(formattedBalance);
-      const balanceStr = isNaN(balance) ? "0.00" : balance.toFixed(2);
-      
-      // Update the toToken if it's ETH L2
-      setToToken(prev => prev.symbol === 'ETH' && prev.layer === 'L2' ? {
-        ...prev,
-        balance: balanceStr
-      } : prev);
+      const balanceStr = formatBalanceFromValue(ethL2Balance);
+      setToToken(prev => 
+        prev.symbol === 'ETH' && prev.layer === 'L2' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
     }
   }, [ethL2Balance]);
 
-  // Poll balances every 10 seconds
+  // Poll balances
   useEffect(() => {
     const interval = setInterval(() => {
-      // Refetch all balances
       refetchPsdnBalance();
       refetchPsdnL2Balance();
       refetchEthBalance();
       refetchEthL2Balance();
-    }, 10000); // 10 seconds
+    }, POLLING_INTERVAL);
 
     return () => clearInterval(interval);
   }, [refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance]);
 
-  const handleSwap = async () => {
+  // Event handlers
+  const handleSwap = useCallback(async () => {
     if (isSwapping) return;
     
     setIsSwapping(true);
@@ -262,168 +250,151 @@ export function BridgeInterface() {
       setIsSwapping(false);
       setShowCalculation(false);
     }, 600);
-  };
+  }, [isSwapping, fromToken, toToken]);
 
-  const handleFromAmountChange = (amount: string) => {
+  const handleFromAmountChange = useCallback((amount: string) => {
     setFromAmount(amount);
     
-    // Simple conversion logic (1 PSDN = 1 UNKNOWN for demo)
+    // Simple conversion logic (1:1 for demo)
     const numAmount = parseFloat(amount);
     if (!isNaN(numAmount)) {
-      const convertedAmount = (numAmount * 1).toFixed(2);
-      setToAmount(convertedAmount);
+      setToAmount(numAmount.toFixed(2));
     } else {
       setToAmount("0");
     }
-  };
+  }, []);
 
-  const handleToAmountChange = (amount: string) => {
+  const handleToAmountChange = useCallback((amount: string) => {
     setToAmount(amount);
     
     // Reverse conversion logic
     const numAmount = parseFloat(amount);
     if (!isNaN(numAmount)) {
-      const convertedAmount = (numAmount / 1).toFixed(2);
-      setFromAmount(convertedAmount);
+      setFromAmount(numAmount.toFixed(2));
     } else {
       setFromAmount("0");
     }
-  };
+  }, []);
 
-  const handleFromAmountBlur = () => {
+  const handleFromAmountBlur = useCallback(() => {
     const numAmount = parseFloat(fromAmount);
     if (!isNaN(numAmount) && fromAmount !== '') {
       setFromAmount(numAmount.toFixed(2));
     }
-  };
+  }, [fromAmount]);
 
-  const handleToAmountBlur = () => {
+  const handleToAmountBlur = useCallback(() => {
     const numAmount = parseFloat(toAmount);
     if (!isNaN(numAmount) && toAmount !== '') {
       setToAmount(numAmount.toFixed(2));
     }
-  };
+  }, [toAmount]);
 
-  const handleTokenSelect = (selectedToken: Token) => {
-    // Update the fromToken with the current balance
-    const updatedFromToken = { ...selectedToken };
-    
+  const handleTokenSelect = useCallback((selectedToken: Token) => {
     // Get the correct balance based on token type and layer
+    let balanceStr = "0.00";
+    
     if (selectedToken.symbol === 'PSDN') {
-      if (selectedToken.layer === 'L1') {
-        const balanceStr = psdnBalance ? formatUnits(psdnBalance, 18) : "0.00";
-        const balance = parseFloat(balanceStr);
-        updatedFromToken.balance = isNaN(balance) ? "0.00" : balance.toFixed(2);
-      } else {
-        const balanceStr = psdnL2Balance ? formatUnits(psdnL2Balance, 18) : "0.00";
-        const balance = parseFloat(balanceStr);
-        updatedFromToken.balance = isNaN(balance) ? "0.00" : balance.toFixed(2);
-      }
+      balanceStr = selectedToken.layer === 'L1' 
+        ? formatBalance(psdnBalance)
+        : formatBalance(psdnL2Balance);
     } else if (selectedToken.symbol === 'ETH') {
-      if (selectedToken.layer === 'L1') {
-        const balanceStr = ethBalance ? formatUnits(ethBalance.value, 18) : "0.00";
-        const balance = parseFloat(balanceStr);
-        updatedFromToken.balance = isNaN(balance) ? "0.00" : balance.toFixed(2);
-      } else {
-        const balanceStr = ethL2Balance ? formatUnits(ethL2Balance.value, 18) : "0.00";
-        const balance = parseFloat(balanceStr);
-        updatedFromToken.balance = isNaN(balance) ? "0.00" : balance.toFixed(2);
-      }
+      balanceStr = selectedToken.layer === 'L1'
+        ? formatBalanceFromValue(ethBalance)
+        : formatBalanceFromValue(ethL2Balance);
     }
     
+    const updatedFromToken = { ...selectedToken, balance: balanceStr };
     setFromToken(updatedFromToken);
     
     // Auto-update the toToken based on the selected fromToken
     if (selectedToken.layer === 'L1') {
       // If L1 is selected, set corresponding L2 token
       if (selectedToken.symbol === 'PSDN') {
-        const l2BalanceStr = psdnL2Balance ? formatUnits(psdnL2Balance, 18) : "0.00";
-        const l2Balance = parseFloat(l2BalanceStr);
-        setToToken({ ...PSDN_L2_TOKEN, balance: isNaN(l2Balance) ? "0.00" : l2Balance.toFixed(2) });
+        setToToken({ ...PSDN_L2_TOKEN, balance: formatBalance(psdnL2Balance) });
       } else if (selectedToken.symbol === 'ETH') {
-        const l2BalanceStr = ethL2Balance ? formatUnits(ethL2Balance.value, 18) : "0.00";
-        const l2Balance = parseFloat(l2BalanceStr);
-        setToToken({ ...ETH_L2_TOKEN, balance: isNaN(l2Balance) ? "0.00" : l2Balance.toFixed(2) });
+        setToToken({ ...ETH_L2_TOKEN, balance: formatBalanceFromValue(ethL2Balance) });
       }
     } else {
       // If L2 is selected, set corresponding L1 token
       if (selectedToken.symbol === 'PSDN') {
-        const l1BalanceStr = psdnBalance ? formatUnits(psdnBalance, 18) : "0.00";
-        const l1Balance = parseFloat(l1BalanceStr);
-        setToToken({ ...PSDN_L1_TOKEN, balance: isNaN(l1Balance) ? "0.00" : l1Balance.toFixed(2) });
+        setToToken({ ...PSDN_L1_TOKEN, balance: formatBalance(psdnBalance) });
       } else if (selectedToken.symbol === 'ETH') {
-        const l1BalanceStr = ethBalance ? formatUnits(ethBalance.value, 18) : "0.00";
-        const l1Balance = parseFloat(l1BalanceStr);
-        setToToken({ ...ETH_L1_TOKEN, balance: isNaN(l1Balance) ? "0.00" : l1Balance.toFixed(2) });
+        setToToken({ ...ETH_L1_TOKEN, balance: formatBalanceFromValue(ethBalance) });
       }
     }
     
     setIsTokenSelectorOpen(false);
-  };
+  }, [psdnBalance, psdnL2Balance, ethBalance, ethL2Balance]);
 
 
-  const handleTransact = async () => {
+  const handleTransact = useCallback(async () => {
     if (!address || !fromAmount || parseFloat(fromAmount) <= 0) {
       return;
     }
 
     try {
-      const amount = parseUnits(fromAmount, 18);
+      const amount = parseUnits(fromAmount, TOKEN_DECIMALS);
 
       if (fromToken.symbol === 'ETH') {
         // For ETH, use bridgeEthTo call
         await writeBridgeEth({
-          args: [
-            address, // recipient address
-            200000, // min gas limit
-            "0x" // extra data (empty)
-          ],
-          value: amount, // ETH amount to deposit
+          args: [address, MIN_GAS_LIMIT, "0x"],
+          value: amount,
         });
-
-        // Refresh ETH balance after successful transaction
-        refetchPsdnBalance();
-        refetchPsdnL2Balance();
-        refetchEthBalance();
-        refetchEthL2Balance();
       } else {
         // For PSDN, use the existing ERC20 flow
-        // Check if we need to approve first
         const needsApproval = !currentAllowance || currentAllowance < amount;
         
         if (needsApproval) {
           // Approve max amount to avoid future approvals
           await writeApprove({
-            args: ["0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae", BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")], // Max uint256
+            args: [CONTRACT_ADDRESSES.BRIDGE, BigInt(MAX_UINT256)],
           });
-          
-          // Refresh allowance after approval
           refetchAllowance();
         }
         
         // Then call depositERC20To on the Bridge contract
         await writeDepositErc20({
           args: [
-            "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46", // L1 token (PSDN)
-            "0x30f627A3de293d408E89D4C3E40a41bbF638bC36", // L2 token (PSDN Subnet 0)
-            address, // recipient address
-            amount, // amount to deposit
-            200000, // min gas limit
-            "0x" // extra data (empty)
+            CONTRACT_ADDRESSES.PSDN_L1,
+            CONTRACT_ADDRESSES.PSDN_L2,
+            address,
+            amount,
+            MIN_GAS_LIMIT,
+            "0x"
           ],
         });
-        
-        // Refresh balance and allowance after successful transaction
-        refetchPsdnBalance();
-        refetchPsdnL2Balance();
-        refetchEthBalance();
-        refetchEthL2Balance();
-        refetchAllowance();
       }
+      
+      // Refresh all balances after successful transaction
+      refetchPsdnBalance();
+      refetchPsdnL2Balance();
+      refetchEthBalance();
+      refetchEthL2Balance();
+      refetchAllowance();
     } catch (error) {
       console.error("Transaction failed:", error);
     }
-  };
+  }, [address, fromAmount, fromToken.symbol, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+
+  // Memoized values
+  const availableTokens = useMemo(() => 
+    isL1OnTop 
+      ? getAvailableL1Tokens(psdnBalance, ethBalance)
+      : getAvailableL2Tokens(psdnL2Balance, ethL2Balance),
+    [isL1OnTop, psdnBalance, ethBalance, psdnL2Balance, ethL2Balance]
+  );
+
+  const isTransactionPending = useMemo(() => 
+    isApprovePending || isBridgeEthPending || isDepositErc20Pending,
+    [isApprovePending, isBridgeEthPending, isDepositErc20Pending]
+  );
+
+  const hasError = useMemo(() => 
+    approveError || bridgeEthError || depositErc20Error,
+    [approveError, bridgeEthError, depositErc20Error]
+  );
 
   return (
     <div className="w-full max-w-md mx-auto p-2">
@@ -587,18 +558,18 @@ export function BridgeInterface() {
           className="w-full mt-6"
           variant="outline"
           onClick={isL2ToL1 ? undefined : handleTransact}
-          disabled={isL2ToL1 || !address || !fromAmount || parseFloat(fromAmount) <= 0 || isApprovePending || isBridgeEthPending || isDepositErc20Pending}
+          disabled={isL2ToL1 || !address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
         >
-          {isL2ToL1 ? "Disabled" : (isApprovePending || isBridgeEthPending || isDepositErc20Pending) ? "Processing..." : "Transact"}
+          {isL2ToL1 ? "Disabled" : isTransactionPending ? "Processing..." : "Transact"}
         </Button>
         </div>
 
 
         {/* Error Display */}
-        {(approveError || bridgeEthError || depositErc20Error) && (
+        {hasError && (
           <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg relative z-10">
             <p className="text-destructive text-sm font-medium">
-              Error: {(approveError || bridgeEthError || depositErc20Error)?.message}
+              Error: {hasError?.message}
             </p>
           </div>
         )}
@@ -607,10 +578,7 @@ export function BridgeInterface() {
         <TokenSelector
           selectedToken={fromToken}
           onTokenSelect={handleTokenSelect}
-          tokens={isL1OnTop 
-            ? getAvailableL1Tokens(psdnBalance, ethBalance)
-            : getAvailableL2Tokens(psdnL2Balance, ethL2Balance)
-          }
+          tokens={availableTokens}
           isOpen={isTokenSelectorOpen}
           onClose={() => setIsTokenSelectorOpen(false)}
           title="Select a token"

@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Poseidon Bridge",
   description: "Poseidon Bridge",
+  icons: {
+    icon: "https://psdn.ai/icon.png?07720b992e581016",
+    shortcut: "https://psdn.ai/icon.png?07720b992e581016",
+    apple: "https://psdn.ai/icon.png?07720b992e581016",
+  },
 };
 
 export default function RootLayout({
