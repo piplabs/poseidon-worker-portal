@@ -5,6 +5,7 @@ import { WagmiProvider } from "wagmi";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { PropsWithChildren } from "react";
 import { psdnDevnet, psdnL2Devnet } from "@/lib/chains";
+import { PendingTransactionsProvider } from "@/contexts/PendingTransactionsContext";
 
 const walletConnectProjectId = "00000000000000000000000000000000";
 
@@ -22,7 +23,9 @@ export function Providers({ children }: PropsWithChildren) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={darkTheme()}>
-          {children}
+          <PendingTransactionsProvider>
+            {children}
+          </PendingTransactionsProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
