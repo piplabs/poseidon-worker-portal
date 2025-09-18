@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { TokenSelector } from "@/components/token-selector";
+import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useBalance } from "wagmi";
@@ -12,7 +13,8 @@ import {
   useReadMintPsdnAllowance,
   useWriteMintPsdnApprove,
   useWriteBridgeBridgeEthTo,
-  useWriteBridgeDepositErc20To
+  useWriteBridgeDepositErc20To,
+  useWriteL2BridgeBridgeErc20
 } from "@/generated";
 import {
   CHAIN_IDS,
@@ -45,6 +47,7 @@ import {
   isValidAmount,
   getTokenBalance,
 } from "@/lib/utils";
+import { usePendingTransactionsContext } from "@/contexts/PendingTransactionsContext";
 
 
 export function BridgeInterface() {
@@ -59,6 +62,7 @@ export function BridgeInterface() {
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
 
   const { address } = useAccount();
+  const { addPendingTransaction, updateTransactionStatus } = usePendingTransactionsContext();
   
   // Computed values
   const isL2ToL1 = fromToken.layer === 'L2';
@@ -68,6 +72,7 @@ export function BridgeInterface() {
   const { writeContract: writeApprove, isPending: isApprovePending, error: approveError } = useWriteMintPsdnApprove();
   const { writeContract: writeBridgeEth, isPending: isBridgeEthPending, error: bridgeEthError } = useWriteBridgeBridgeEthTo();
   const { writeContract: writeDepositErc20, isPending: isDepositErc20Pending, error: depositErc20Error } = useWriteBridgeDepositErc20To();
+  const { writeContract: writeL2BridgeErc20, isPending: isL2BridgeErc20Pending, error: l2BridgeErc20Error } = useWriteL2BridgeBridgeErc20();
 
   // Update tokens when bridge option changes
   useEffect(() => {
@@ -87,6 +92,7 @@ export function BridgeInterface() {
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
     },
+    chainId: CHAIN_IDS.L1,
   });
 
   const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
@@ -120,6 +126,7 @@ export function BridgeInterface() {
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
     },
+    chainId: CHAIN_IDS.L1,
   });
 
   // Balance update effects
@@ -252,28 +259,58 @@ export function BridgeInterface() {
           value: amount,
         });
       } else {
-        // For PSDN, use the existing ERC20 flow
-        const needsApproval = !currentAllowance || currentAllowance < amount;
-        
-        if (needsApproval) {
-          // Approve max amount to avoid future approvals
-          await writeApprove({
-            args: [CONTRACT_ADDRESSES.BRIDGE, BigInt(MAX_UINT256)],
+        // For PSDN, handle both L1->L2 and L2->L1
+        if (isL2ToL1) {
+          // L2 -> L1: Use L2Bridge bridgeErc20
+          // Add to pending transactions immediately
+          const pendingId = addPendingTransaction({
+            type: 'L2_TO_L1_PSDN',
+            fromToken: fromToken.symbol,
+            toToken: toToken.symbol,
+            amount: amount.toString(),
           });
-          refetchAllowance();
+
+          try {
+            await writeL2BridgeErc20({
+              args: [
+                CONTRACT_ADDRESSES.PSDN_L2, // L2 token address
+                CONTRACT_ADDRESSES.PSDN_L1, // L1 token address
+                amount,
+                MIN_GAS_LIMIT,
+                EMPTY_EXTRA_DATA
+              ],
+            });
+
+            // Keep as pending - the full bridge process is still pending
+            // The L1 withdrawal will be processed separately
+          } catch (error) {
+            updateTransactionStatus(pendingId, 'failed');
+            throw error; // Re-throw to trigger error handling
+          }
+        } else {
+          // L1 -> L2: Use existing ERC20 flow
+          const needsApproval = !currentAllowance || currentAllowance < amount;
+          
+          if (needsApproval) {
+            // Approve max amount to avoid future approvals
+            await writeApprove({
+              args: [CONTRACT_ADDRESSES.BRIDGE, BigInt(MAX_UINT256)],
+            });
+            refetchAllowance();
+          }
+          
+          // Then call depositERC20To on the Bridge contract
+          await writeDepositErc20({
+            args: [
+              CONTRACT_ADDRESSES.PSDN_L1,
+              CONTRACT_ADDRESSES.PSDN_L2,
+              address,
+              amount,
+              MIN_GAS_LIMIT,
+              EMPTY_EXTRA_DATA
+            ],
+          });
         }
-        
-        // Then call depositERC20To on the Bridge contract
-        await writeDepositErc20({
-          args: [
-            CONTRACT_ADDRESSES.PSDN_L1,
-            CONTRACT_ADDRESSES.PSDN_L2,
-            address,
-            amount,
-            MIN_GAS_LIMIT,
-            EMPTY_EXTRA_DATA
-          ],
-        });
       }
       
       // Refresh all balances after successful transaction
@@ -285,7 +322,7 @@ export function BridgeInterface() {
     } catch (error) {
       console.error("Transaction failed:", error);
     }
-  }, [address, fromAmount, fromToken.symbol, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -296,17 +333,19 @@ export function BridgeInterface() {
   );
 
   const isTransactionPending = useMemo(() => 
-    isApprovePending || isBridgeEthPending || isDepositErc20Pending,
-    [isApprovePending, isBridgeEthPending, isDepositErc20Pending]
+    isApprovePending || isBridgeEthPending || isDepositErc20Pending || isL2BridgeErc20Pending,
+    [isApprovePending, isBridgeEthPending, isDepositErc20Pending, isL2BridgeErc20Pending]
   );
 
   const hasError = useMemo(() => 
-    approveError || bridgeEthError || depositErc20Error,
-    [approveError, bridgeEthError, depositErc20Error]
+    approveError || bridgeEthError || depositErc20Error || l2BridgeErc20Error,
+    [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error]
   );
 
   return (
-    <div className="w-full max-w-md mx-auto p-2">
+    <>
+      <PendingTransactionsTab />
+      <div className="w-full max-w-md mx-auto p-2">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -466,10 +505,10 @@ export function BridgeInterface() {
         <Button
           className="w-full mt-6"
           variant="outline"
-          onClick={isL2ToL1 ? undefined : handleTransact}
-          disabled={isL2ToL1 || !address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
+          onClick={handleTransact}
+          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || (isL2ToL1 && fromToken.symbol === 'ETH')}
         >
-          {isL2ToL1 ? "Disabled" : isTransactionPending ? "Processing..." : "Transact"}
+          {isL2ToL1 && fromToken.symbol === 'ETH' ? "ETH L2->L1 Disabled" : isTransactionPending ? "Processing..." : "Transact"}
         </Button>
         </div>
 
@@ -493,6 +532,7 @@ export function BridgeInterface() {
           title="Select a token"
         />
       </motion.div>
-    </div>
+      </div>
+    </>
   );
 }
