@@ -8,7 +8,7 @@ import { Coins, ArrowLeft } from "lucide-react";
 import { useWriteMintPsdnMint } from "@/generated";
 import { useAccount } from "wagmi";
 import { parseUnits } from "viem";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint'>('bridge');
