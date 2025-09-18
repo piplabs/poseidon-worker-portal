@@ -1,7 +1,5 @@
 "use client";
 
-import { NumberScroll } from "./number-scroll";
-
 interface Token {
   symbol: string;
   name: string;
@@ -24,8 +22,6 @@ export function TokenCard({
   onAmountChange,
   isFrom,
 }: TokenCardProps) {
-  const usdValue = parseFloat(amount) * 0.15;
-
   return (
     <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3">
       {/* Token Info Row */}
@@ -72,15 +68,6 @@ export function TokenCard({
           className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
           disabled={false}
         />
-        {isFrom && amount !== "0" && (
-          <NumberScroll
-            value={usdValue}
-            prefix="= $"
-            className="text-muted-foreground text-sm"
-            duration={0.6}
-            decimals={4}
-          />
-        )}
         {!isFrom && (
           <div className="text-muted-foreground text-sm">Receive {token.symbol}</div>
         )}

@@ -546,12 +546,386 @@ export const bridgeAddress = {
 export const bridgeConfig = { address: bridgeAddress, abi: bridgeAbi } as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// MintPSDN
+// L2Bridge
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  *
  */
+export const l2BridgeAbi = [
+  { type: 'constructor', inputs: [], stateMutability: 'nonpayable' },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'l1Token',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'l2Token',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      { name: 'from', internalType: 'address', type: 'address', indexed: true },
+      { name: 'to', internalType: 'address', type: 'address', indexed: false },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'extraData',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'DepositFinalized',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'localToken',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'remoteToken',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      { name: 'from', internalType: 'address', type: 'address', indexed: true },
+      { name: 'to', internalType: 'address', type: 'address', indexed: false },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'extraData',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'ERC20BridgeFinalized',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'localToken',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'remoteToken',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      { name: 'from', internalType: 'address', type: 'address', indexed: true },
+      { name: 'to', internalType: 'address', type: 'address', indexed: false },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'extraData',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'ERC20BridgeInitiated',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      { name: 'from', internalType: 'address', type: 'address', indexed: true },
+      { name: 'to', internalType: 'address', type: 'address', indexed: true },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'extraData',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'ETHBridgeFinalized',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      { name: 'from', internalType: 'address', type: 'address', indexed: true },
+      { name: 'to', internalType: 'address', type: 'address', indexed: true },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'extraData',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'ETHBridgeInitiated',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      { name: 'version', internalType: 'uint8', type: 'uint8', indexed: false },
+    ],
+    name: 'Initialized',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'l1Token',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'l2Token',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      { name: 'from', internalType: 'address', type: 'address', indexed: true },
+      { name: 'to', internalType: 'address', type: 'address', indexed: false },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'extraData',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'WithdrawalInitiated',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_localToken', internalType: 'address', type: 'address' },
+      { name: '_remoteToken', internalType: 'address', type: 'address' },
+      { name: '_amount', internalType: 'uint256', type: 'uint256' },
+      { name: '_minGasLimit', internalType: 'uint32', type: 'uint32' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'bridgeERC20',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_localToken', internalType: 'address', type: 'address' },
+      { name: '_remoteToken', internalType: 'address', type: 'address' },
+      { name: '_to', internalType: 'address', type: 'address' },
+      { name: '_amount', internalType: 'uint256', type: 'uint256' },
+      { name: '_minGasLimit', internalType: 'uint32', type: 'uint32' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'bridgeERC20To',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_minGasLimit', internalType: 'uint32', type: 'uint32' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'bridgeETH',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_to', internalType: 'address', type: 'address' },
+      { name: '_minGasLimit', internalType: 'uint32', type: 'uint32' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'bridgeETHTo',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '', internalType: 'address', type: 'address' },
+      { name: '', internalType: 'address', type: 'address' },
+    ],
+    name: 'deposits',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_localToken', internalType: 'address', type: 'address' },
+      { name: '_remoteToken', internalType: 'address', type: 'address' },
+      { name: '_from', internalType: 'address', type: 'address' },
+      { name: '_to', internalType: 'address', type: 'address' },
+      { name: '_amount', internalType: 'uint256', type: 'uint256' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'finalizeBridgeERC20',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_from', internalType: 'address', type: 'address' },
+      { name: '_to', internalType: 'address', type: 'address' },
+      { name: '_amount', internalType: 'uint256', type: 'uint256' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'finalizeBridgeETH',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      {
+        name: '_otherBridge',
+        internalType: 'contract StandardBridge',
+        type: 'address',
+      },
+    ],
+    name: 'initialize',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'l1TokenBridge',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'messenger',
+    outputs: [
+      {
+        name: '',
+        internalType: 'contract ICrossDomainMessenger',
+        type: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'otherBridge',
+    outputs: [
+      { name: '', internalType: 'contract StandardBridge', type: 'address' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'paused',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'version',
+    outputs: [{ name: '', internalType: 'string', type: 'string' }],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_l2Token', internalType: 'address', type: 'address' },
+      { name: '_amount', internalType: 'uint256', type: 'uint256' },
+      { name: '_minGasLimit', internalType: 'uint32', type: 'uint32' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'withdraw',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_l2Token', internalType: 'address', type: 'address' },
+      { name: '_to', internalType: 'address', type: 'address' },
+      { name: '_amount', internalType: 'uint256', type: 'uint256' },
+      { name: '_minGasLimit', internalType: 'uint32', type: 'uint32' },
+      { name: '_extraData', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'withdrawTo',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  { type: 'receive', stateMutability: 'payable' },
+] as const
+
+/**
+ *
+ */
+export const l2BridgeAddress = {
+  11711: '0x4200000000000000000000000000000000000010',
+} as const
+
+/**
+ *
+ */
+export const l2BridgeConfig = {
+  address: l2BridgeAddress,
+  abi: l2BridgeAbi,
+} as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// MintPSDN
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+
+*/
 export const mintPsdnAbi = [
   { type: 'constructor', inputs: [], stateMutability: 'nonpayable' },
   {
@@ -927,15 +1301,16 @@ export const mintPsdnAbi = [
 ] as const
 
 /**
- *
- */
+
+*/
 export const mintPsdnAddress = {
   1518: '0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46',
+  11711: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
 } as const
 
 /**
- *
- */
+
+*/
 export const mintPsdnConfig = {
   address: mintPsdnAddress,
   abi: mintPsdnAbi,
@@ -1536,9 +1911,401 @@ export const useWatchBridgeInitializedEvent =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__
+ *
+ *
+ */
+export const useReadL2Bridge = /*#__PURE__*/ createUseReadContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+})
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"deposits"`
+ *
+ *
+ */
+export const useReadL2BridgeDeposits = /*#__PURE__*/ createUseReadContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'deposits',
+})
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"l1TokenBridge"`
+ *
+ *
+ */
+export const useReadL2BridgeL1TokenBridge = /*#__PURE__*/ createUseReadContract(
+  { abi: l2BridgeAbi, address: l2BridgeAddress, functionName: 'l1TokenBridge' },
+)
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"messenger"`
+ *
+ *
+ */
+export const useReadL2BridgeMessenger = /*#__PURE__*/ createUseReadContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'messenger',
+})
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"otherBridge"`
+ *
+ *
+ */
+export const useReadL2BridgeOtherBridge = /*#__PURE__*/ createUseReadContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'otherBridge',
+})
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"paused"`
+ *
+ *
+ */
+export const useReadL2BridgePaused = /*#__PURE__*/ createUseReadContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'paused',
+})
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"version"`
+ *
+ *
+ */
+export const useReadL2BridgeVersion = /*#__PURE__*/ createUseReadContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'version',
+})
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__
+ *
+ *
+ */
+export const useWriteL2Bridge = /*#__PURE__*/ createUseWriteContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+})
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeERC20"`
+ *
+ *
+ */
+export const useWriteL2BridgeBridgeErc20 = /*#__PURE__*/ createUseWriteContract(
+  { abi: l2BridgeAbi, address: l2BridgeAddress, functionName: 'bridgeERC20' },
+)
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeERC20To"`
+ *
+ *
+ */
+export const useWriteL2BridgeBridgeErc20To =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'bridgeERC20To',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeETH"`
+ *
+ *
+ */
+export const useWriteL2BridgeBridgeEth = /*#__PURE__*/ createUseWriteContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'bridgeETH',
+})
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeETHTo"`
+ *
+ *
+ */
+export const useWriteL2BridgeBridgeEthTo = /*#__PURE__*/ createUseWriteContract(
+  { abi: l2BridgeAbi, address: l2BridgeAddress, functionName: 'bridgeETHTo' },
+)
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"finalizeBridgeERC20"`
+ *
+ *
+ */
+export const useWriteL2BridgeFinalizeBridgeErc20 =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'finalizeBridgeERC20',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"finalizeBridgeETH"`
+ *
+ *
+ */
+export const useWriteL2BridgeFinalizeBridgeEth =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'finalizeBridgeETH',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"initialize"`
+ *
+ *
+ */
+export const useWriteL2BridgeInitialize = /*#__PURE__*/ createUseWriteContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'initialize',
+})
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"withdraw"`
+ *
+ *
+ */
+export const useWriteL2BridgeWithdraw = /*#__PURE__*/ createUseWriteContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'withdraw',
+})
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"withdrawTo"`
+ *
+ *
+ */
+export const useWriteL2BridgeWithdrawTo = /*#__PURE__*/ createUseWriteContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+  functionName: 'withdrawTo',
+})
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__
+ *
+ *
+ */
+export const useSimulateL2Bridge = /*#__PURE__*/ createUseSimulateContract({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+})
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeERC20"`
+ *
+ *
+ */
+export const useSimulateL2BridgeBridgeErc20 =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'bridgeERC20',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeERC20To"`
+ *
+ *
+ */
+export const useSimulateL2BridgeBridgeErc20To =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'bridgeERC20To',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeETH"`
+ *
+ *
+ */
+export const useSimulateL2BridgeBridgeEth =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'bridgeETH',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"bridgeETHTo"`
+ *
+ *
+ */
+export const useSimulateL2BridgeBridgeEthTo =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'bridgeETHTo',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"finalizeBridgeERC20"`
+ *
+ *
+ */
+export const useSimulateL2BridgeFinalizeBridgeErc20 =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'finalizeBridgeERC20',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"finalizeBridgeETH"`
+ *
+ *
+ */
+export const useSimulateL2BridgeFinalizeBridgeEth =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'finalizeBridgeETH',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"initialize"`
+ *
+ *
+ */
+export const useSimulateL2BridgeInitialize =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'initialize',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"withdraw"`
+ *
+ *
+ */
+export const useSimulateL2BridgeWithdraw =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'withdraw',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link l2BridgeAbi}__ and `functionName` set to `"withdrawTo"`
+ *
+ *
+ */
+export const useSimulateL2BridgeWithdrawTo =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    functionName: 'withdrawTo',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__
+ *
+ *
+ */
+export const useWatchL2BridgeEvent = /*#__PURE__*/ createUseWatchContractEvent({
+  abi: l2BridgeAbi,
+  address: l2BridgeAddress,
+})
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"DepositFinalized"`
+ *
+ *
+ */
+export const useWatchL2BridgeDepositFinalizedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'DepositFinalized',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"ERC20BridgeFinalized"`
+ *
+ *
+ */
+export const useWatchL2BridgeErc20BridgeFinalizedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'ERC20BridgeFinalized',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"ERC20BridgeInitiated"`
+ *
+ *
+ */
+export const useWatchL2BridgeErc20BridgeInitiatedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'ERC20BridgeInitiated',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"ETHBridgeFinalized"`
+ *
+ *
+ */
+export const useWatchL2BridgeEthBridgeFinalizedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'ETHBridgeFinalized',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"ETHBridgeInitiated"`
+ *
+ *
+ */
+export const useWatchL2BridgeEthBridgeInitiatedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'ETHBridgeInitiated',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"Initialized"`
+ *
+ *
+ */
+export const useWatchL2BridgeInitializedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'Initialized',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link l2BridgeAbi}__ and `eventName` set to `"WithdrawalInitiated"`
+ *
+ *
+ */
+export const useWatchL2BridgeWithdrawalInitiatedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: l2BridgeAbi,
+    address: l2BridgeAddress,
+    eventName: 'WithdrawalInitiated',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__
- *
- *
  */
 export const useReadMintPsdn = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1547,8 +2314,6 @@ export const useReadMintPsdn = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"DOMAIN_SEPARATOR"`
- *
- *
  */
 export const useReadMintPsdnDomainSeparator =
   /*#__PURE__*/ createUseReadContract({
@@ -1559,8 +2324,6 @@ export const useReadMintPsdnDomainSeparator =
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"UPGRADE_INTERFACE_VERSION"`
- *
- *
  */
 export const useReadMintPsdnUpgradeInterfaceVersion =
   /*#__PURE__*/ createUseReadContract({
@@ -1571,8 +2334,6 @@ export const useReadMintPsdnUpgradeInterfaceVersion =
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"allowance"`
- *
- *
  */
 export const useReadMintPsdnAllowance = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1582,8 +2343,6 @@ export const useReadMintPsdnAllowance = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"balanceOf"`
- *
- *
  */
 export const useReadMintPsdnBalanceOf = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1593,8 +2352,6 @@ export const useReadMintPsdnBalanceOf = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"decimals"`
- *
- *
  */
 export const useReadMintPsdnDecimals = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1604,8 +2361,6 @@ export const useReadMintPsdnDecimals = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"eip712Domain"`
- *
- *
  */
 export const useReadMintPsdnEip712Domain = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1615,8 +2370,6 @@ export const useReadMintPsdnEip712Domain = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"name"`
- *
- *
  */
 export const useReadMintPsdnName = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1626,8 +2379,6 @@ export const useReadMintPsdnName = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"nonces"`
- *
- *
  */
 export const useReadMintPsdnNonces = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1637,8 +2388,6 @@ export const useReadMintPsdnNonces = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"owner"`
- *
- *
  */
 export const useReadMintPsdnOwner = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1648,8 +2397,6 @@ export const useReadMintPsdnOwner = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"proxiableUUID"`
- *
- *
  */
 export const useReadMintPsdnProxiableUuid = /*#__PURE__*/ createUseReadContract(
   { abi: mintPsdnAbi, address: mintPsdnAddress, functionName: 'proxiableUUID' },
@@ -1657,8 +2404,6 @@ export const useReadMintPsdnProxiableUuid = /*#__PURE__*/ createUseReadContract(
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"symbol"`
- *
- *
  */
 export const useReadMintPsdnSymbol = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1668,8 +2413,6 @@ export const useReadMintPsdnSymbol = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"totalSupply"`
- *
- *
  */
 export const useReadMintPsdnTotalSupply = /*#__PURE__*/ createUseReadContract({
   abi: mintPsdnAbi,
@@ -1679,8 +2422,6 @@ export const useReadMintPsdnTotalSupply = /*#__PURE__*/ createUseReadContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__
- *
- *
  */
 export const useWriteMintPsdn = /*#__PURE__*/ createUseWriteContract({
   abi: mintPsdnAbi,
@@ -1689,8 +2430,6 @@ export const useWriteMintPsdn = /*#__PURE__*/ createUseWriteContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"approve"`
- *
- *
  */
 export const useWriteMintPsdnApprove = /*#__PURE__*/ createUseWriteContract({
   abi: mintPsdnAbi,
@@ -1700,8 +2439,6 @@ export const useWriteMintPsdnApprove = /*#__PURE__*/ createUseWriteContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"initialize"`
- *
- *
  */
 export const useWriteMintPsdnInitialize = /*#__PURE__*/ createUseWriteContract({
   abi: mintPsdnAbi,
@@ -1711,8 +2448,6 @@ export const useWriteMintPsdnInitialize = /*#__PURE__*/ createUseWriteContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"mint"`
- *
- *
  */
 export const useWriteMintPsdnMint = /*#__PURE__*/ createUseWriteContract({
   abi: mintPsdnAbi,
@@ -1722,8 +2457,6 @@ export const useWriteMintPsdnMint = /*#__PURE__*/ createUseWriteContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"permit"`
- *
- *
  */
 export const useWriteMintPsdnPermit = /*#__PURE__*/ createUseWriteContract({
   abi: mintPsdnAbi,
@@ -1733,8 +2466,6 @@ export const useWriteMintPsdnPermit = /*#__PURE__*/ createUseWriteContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"renounceOwnership"`
- *
- *
  */
 export const useWriteMintPsdnRenounceOwnership =
   /*#__PURE__*/ createUseWriteContract({
@@ -1745,8 +2476,6 @@ export const useWriteMintPsdnRenounceOwnership =
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"transfer"`
- *
- *
  */
 export const useWriteMintPsdnTransfer = /*#__PURE__*/ createUseWriteContract({
   abi: mintPsdnAbi,
@@ -1756,8 +2485,6 @@ export const useWriteMintPsdnTransfer = /*#__PURE__*/ createUseWriteContract({
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"transferFrom"`
- *
- *
  */
 export const useWriteMintPsdnTransferFrom =
   /*#__PURE__*/ createUseWriteContract({
@@ -1768,8 +2495,6 @@ export const useWriteMintPsdnTransferFrom =
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"transferOwnership"`
- *
- *
  */
 export const useWriteMintPsdnTransferOwnership =
   /*#__PURE__*/ createUseWriteContract({
@@ -1780,8 +2505,6 @@ export const useWriteMintPsdnTransferOwnership =
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"upgradeToAndCall"`
- *
- *
  */
 export const useWriteMintPsdnUpgradeToAndCall =
   /*#__PURE__*/ createUseWriteContract({
@@ -1792,8 +2515,6 @@ export const useWriteMintPsdnUpgradeToAndCall =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__
- *
- *
  */
 export const useSimulateMintPsdn = /*#__PURE__*/ createUseSimulateContract({
   abi: mintPsdnAbi,
@@ -1802,8 +2523,6 @@ export const useSimulateMintPsdn = /*#__PURE__*/ createUseSimulateContract({
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"approve"`
- *
- *
  */
 export const useSimulateMintPsdnApprove =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1814,8 +2533,6 @@ export const useSimulateMintPsdnApprove =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"initialize"`
- *
- *
  */
 export const useSimulateMintPsdnInitialize =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1826,8 +2543,6 @@ export const useSimulateMintPsdnInitialize =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"mint"`
- *
- *
  */
 export const useSimulateMintPsdnMint = /*#__PURE__*/ createUseSimulateContract({
   abi: mintPsdnAbi,
@@ -1837,8 +2552,6 @@ export const useSimulateMintPsdnMint = /*#__PURE__*/ createUseSimulateContract({
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"permit"`
- *
- *
  */
 export const useSimulateMintPsdnPermit =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1849,8 +2562,6 @@ export const useSimulateMintPsdnPermit =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"renounceOwnership"`
- *
- *
  */
 export const useSimulateMintPsdnRenounceOwnership =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1861,8 +2572,6 @@ export const useSimulateMintPsdnRenounceOwnership =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"transfer"`
- *
- *
  */
 export const useSimulateMintPsdnTransfer =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1873,8 +2582,6 @@ export const useSimulateMintPsdnTransfer =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"transferFrom"`
- *
- *
  */
 export const useSimulateMintPsdnTransferFrom =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1885,8 +2592,6 @@ export const useSimulateMintPsdnTransferFrom =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"transferOwnership"`
- *
- *
  */
 export const useSimulateMintPsdnTransferOwnership =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1897,8 +2602,6 @@ export const useSimulateMintPsdnTransferOwnership =
 
 /**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mintPsdnAbi}__ and `functionName` set to `"upgradeToAndCall"`
- *
- *
  */
 export const useSimulateMintPsdnUpgradeToAndCall =
   /*#__PURE__*/ createUseSimulateContract({
@@ -1909,8 +2612,6 @@ export const useSimulateMintPsdnUpgradeToAndCall =
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__
- *
- *
  */
 export const useWatchMintPsdnEvent = /*#__PURE__*/ createUseWatchContractEvent({
   abi: mintPsdnAbi,
@@ -1919,8 +2620,6 @@ export const useWatchMintPsdnEvent = /*#__PURE__*/ createUseWatchContractEvent({
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__ and `eventName` set to `"Approval"`
- *
- *
  */
 export const useWatchMintPsdnApprovalEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
@@ -1931,8 +2630,6 @@ export const useWatchMintPsdnApprovalEvent =
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__ and `eventName` set to `"EIP712DomainChanged"`
- *
- *
  */
 export const useWatchMintPsdnEip712DomainChangedEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
@@ -1943,8 +2640,6 @@ export const useWatchMintPsdnEip712DomainChangedEvent =
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__ and `eventName` set to `"Initialized"`
- *
- *
  */
 export const useWatchMintPsdnInitializedEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
@@ -1955,8 +2650,6 @@ export const useWatchMintPsdnInitializedEvent =
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__ and `eventName` set to `"OwnershipTransferred"`
- *
- *
  */
 export const useWatchMintPsdnOwnershipTransferredEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
@@ -1967,8 +2660,6 @@ export const useWatchMintPsdnOwnershipTransferredEvent =
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__ and `eventName` set to `"Transfer"`
- *
- *
  */
 export const useWatchMintPsdnTransferEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
@@ -1979,8 +2670,6 @@ export const useWatchMintPsdnTransferEvent =
 
 /**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mintPsdnAbi}__ and `eventName` set to `"Upgraded"`
- *
- *
  */
 export const useWatchMintPsdnUpgradedEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
