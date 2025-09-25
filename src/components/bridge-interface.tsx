@@ -6,8 +6,9 @@ import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
 import { ChevronDown, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useBalance, useSwitchChain, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseUnits, createPublicClient, http, decodeEventLog, parseAbi, keccak256, encodeAbiParameters, defineChain } from "viem";
+import { parseUnits, createPublicClient, http, decodeEventLog, parseAbi, keccak256, encodeAbiParameters } from "viem";
 import { motion } from "motion/react";
+import Image from "next/image";
 import { 
   useReadMintPsdnBalanceOf,
   useReadMintPsdnAllowance,
@@ -56,7 +57,7 @@ export function BridgeInterface() {
   const [toToken, setToToken] = useState<Token>(DEFAULT_TO_TOKEN);
   const [fromAmount, setFromAmount] = useState(ZERO_AMOUNT);
   const [toAmount, setToAmount] = useState(ZERO_AMOUNT);
-  const [bridgeOption, setBridgeOption] = useState<BridgeOption>(DEFAULT_BRIDGE_OPTION);
+  const [bridgeOption] = useState<BridgeOption>(DEFAULT_BRIDGE_OPTION);
   const [isSwapping, setIsSwapping] = useState(false);
   const [showCalculation, setShowCalculation] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
@@ -70,11 +71,11 @@ export function BridgeInterface() {
   
   // Interface for MessagePassed event data
   interface MessagePassedEventData {
-    nonce: bigint;
+    nonce: string;
     sender: string;
     target: string;
-    value: bigint;
-    gasLimit: bigint;
+    value: string;
+    gasLimit: string;
     data: string;
     withdrawalHash: string;
   }
@@ -243,7 +244,7 @@ export function BridgeInterface() {
       console.error('❌ Failed to wait for dispute game:', error);
       throw error;
     }
-  }, []);
+  }, [disputeGameAbi, disputeGameFactoryAbi]);
 
   // Step 3: Generate Merkle Proof
   const generateProof = useCallback(async (withdrawalDetails: MessagePassedEventData, l2BlockNumber: number, disputeGame: DisputeGameData) => {
@@ -316,11 +317,13 @@ export function BridgeInterface() {
       console.log(`   Proof generated at block: ${actualProofBlock}`);
       
       console.log('\n📋 Proof Result:');
-      console.log(`   Account Proof Nodes: ${proofResult.accountProof.length}`);
-      console.log(`   Storage Hash: ${proofResult.storageHash}`);
-      console.log(`   Storage Proof Nodes: ${proofResult.storageProof[0].proof.length}`);
-      console.log(`   Storage Key: ${proofResult.storageProof[0].key}`);
-      console.log(`   Storage Value: ${proofResult.storageProof[0].value}`);
+      if (proofResult) {
+        console.log(`   Account Proof Nodes: ${proofResult.accountProof.length}`);
+        console.log(`   Storage Hash: ${proofResult.storageHash}`);
+        console.log(`   Storage Proof Nodes: ${proofResult.storageProof[0].proof.length}`);
+        console.log(`   Storage Key: ${proofResult.storageProof[0].key}`);
+        console.log(`   Storage Value: ${proofResult.storageProof[0].value}`);
+      }
       
       // Get L2 block data for proof
       const proofL2Block = await l2Client.getBlock({ blockNumber: actualProofBlock });
@@ -329,12 +332,12 @@ export function BridgeInterface() {
       
       // Also get dispute game L2 block if different
       let gameL2Block;
-      if (disputeGame.gameL2Block !== actualProofBlock) {
+      if (Number(disputeGame.gameL2Block) !== Number(actualProofBlock)) {
         try {
           gameL2Block = await l2Client.getBlock({ blockNumber: BigInt(disputeGame.gameL2Block) });
           console.log(`   Game L2 block hash: ${gameL2Block.hash}`);
           console.log(`   Game L2 state root: ${gameL2Block.stateRoot}`);
-        } catch (error) {
+        } catch {
           console.log(`   Could not get game L2 block, using proof block`);
           gameL2Block = proofL2Block;
         }
@@ -456,19 +459,23 @@ export function BridgeInterface() {
       console.log(`   Latest Block Hash: ${outputRootProof.latestBlockhash}`);
       console.log(`   Expected Root: ${disputeGame.rootClaim}`);
       
+      if (!proofResult || !proofResult.storageProof || proofResult.storageProof.length === 0) {
+        throw new Error('No storage proof found');
+      }
+
       return {
         withdrawalProof: proofResult.storageProof[0].proof,
         outputRootProof,
         storageSlot
       };
-    } catch (error) {
-      console.error('❌ Failed to generate proof:', error);
-      throw error;
+    } catch (err) {
+      console.error('❌ Failed to generate proof:', err);
+      throw err;
     }
   }, []);
 
   // OptimismPortal ABI for proof submission
-  const optimismPortalAbi = [
+  const optimismPortalAbi = useMemo(() => [
     {
       type: 'function',
       name: 'proveWithdrawalTransaction',
@@ -515,17 +522,41 @@ export function BridgeInterface() {
       ],
       stateMutability: 'view'
     }
-  ] as const;
+  ] as const, []);
 
   // State for proof submission
   const [proofSubmissionData, setProofSubmissionData] = useState<{
     withdrawalDetails: MessagePassedEventData;
     disputeGame: DisputeGameData;
-    proofData: any;
+    proofData: {
+      withdrawalProof: string[];
+      outputRootProof: {
+        version: string;
+        stateRoot: string;
+        messagePasserStorageRoot: string;
+        latestBlockhash: string;
+      };
+      storageSlot: string;
+    };
   } | null>(null);
 
+  // State to track if dispute game resolution is in progress
+  const [isResolvingGame, setIsResolvingGame] = useState(false);
+  
+  // State to track if withdrawal process is complete
+  const [isWithdrawalComplete, setIsWithdrawalComplete] = useState(false);
+
   // Step 4: Submit Proof to L1
-  const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: any) => {
+  const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: {
+    withdrawalProof: string[];
+    outputRootProof: {
+      version: string;
+      stateRoot: string;
+      messagePasserStorageRoot: string;
+      latestBlockhash: string;
+    };
+    storageSlot: string;
+  }) => {
     try {
       console.log('\n' + '═'.repeat(80));
       console.log('STEP 4: SUBMIT PROOF TO L1');
@@ -752,7 +783,7 @@ export function BridgeInterface() {
     } catch (error) {
       console.error('❌ Failed to submit proof:', error);
     }
-  }, [proofSubmissionData, writeProofContract, chainId, switchChain]);
+  }, [proofSubmissionData, writeProofContract, chainId, switchChain, optimismPortalAbi]);
 
   // Step 6: Finalize withdrawal
   const finalizeWithdrawal = useCallback(async (withdrawalDetails: MessagePassedEventData) => {
@@ -843,7 +874,6 @@ export function BridgeInterface() {
         abi: optimismPortalAbi,
         functionName: 'finalizeWithdrawalTransaction',
         args: [withdrawalTuple],
-        value: 0n,
       });
 
       console.log('✅ Finalization transaction sent!');
@@ -875,25 +905,44 @@ export function BridgeInterface() {
       console.log(`   L1StandardBridge Balance: ${bridgeBalance.toString()} wei`);
 
       const balanceChange = balanceAfter - balanceBefore;
-      if (balanceChange > 0n) {
+      if (balanceChange > BigInt(0)) {
         console.log(`\n🎉 Withdrawal successful! Received ${balanceChange.toString()} wei`);
       } else {
         console.log('\n⚠️ No balance change detected');
       }
+
+      // Mark withdrawal process as complete
+      setIsWithdrawalComplete(true);
+      console.log('\n✅ Withdrawal process completed successfully!');
 
       return true;
     } catch (error) {
       console.error('❌ Failed to finalize withdrawal:', error);
       throw error;
     }
-  }, [address, writeProofContract]);
+  }, [address, writeProofContract, setIsWithdrawalComplete]);
 
   // Step 5: Resolve dispute game
   const resolveGame = useCallback(async (gameAddress: string) => {
+    // Prevent multiple simultaneous executions
+    if (isResolvingGame) {
+      console.log('⚠️ Dispute game resolution already in progress, skipping...');
+      return;
+    }
+
+    // Prevent execution if withdrawal is already complete
+    if (isWithdrawalComplete) {
+      console.log('⚠️ Withdrawal process already complete, skipping dispute game resolution...');
+      return;
+    }
+
+    setIsResolvingGame(true);
+    
     try {
       console.log('\n' + '═'.repeat(80));
       console.log('STEP 5: RESOLVE DISPUTE GAME');
       console.log('═'.repeat(80));
+      
       
       // DisputeGame ABI for resolution
       const disputeGameAbi = [
@@ -987,13 +1036,12 @@ export function BridgeInterface() {
       console.log(`   Claims to resolve: ${claimDataLen}`);
 
       // Resolve claims (from newest to oldest)
-      const claimTxHashes: string[] = [];
       for (let i = Number(claimDataLen) - 1; i >= 0; i--) {
         try {
           console.log(`\n🔧 Resolving claim ${i}...`);
           
           // Use writeContract to actually send the transaction
-          const claimTx = writeProofContract({
+          writeProofContract({
             address: gameAddress as `0x${string}`,
             abi: disputeGameAbi,
             functionName: 'resolveClaim',
@@ -1014,7 +1062,7 @@ export function BridgeInterface() {
         console.log('\n🎯 Resolving the game...');
         
         // Use writeContract to actually send the transaction
-        const gameTx = writeProofContract({
+        writeProofContract({
           address: gameAddress as `0x${string}`,
           abi: disputeGameAbi,
           functionName: 'resolve',
@@ -1041,8 +1089,10 @@ export function BridgeInterface() {
     } catch (error) {
       console.error('❌ Failed to resolve game:', error);
       throw error;
+    } finally {
+      setIsResolvingGame(false);
     }
-  }, [writeProofContract, finalizeWithdrawal, proofSubmissionData]);
+  }, [writeProofContract, finalizeWithdrawal, proofSubmissionData, isResolvingGame, isWithdrawalComplete]);
 
   // Monitor proof submission status
   useEffect(() => {
@@ -1054,8 +1104,6 @@ export function BridgeInterface() {
     }
     if (isProofConfirmed) {
       console.log('\n✅ Proof transaction confirmed!');
-      // Verify proof on-chain
-      verifyProofOnChain();
       
       // Step 5: Resolve the dispute game
       if (proofSubmissionData) {
@@ -1067,42 +1115,6 @@ export function BridgeInterface() {
     }
   }, [proofTxHash, isProofConfirming, isProofConfirmed, proofError, proofSubmissionData, resolveGame]);
 
-  // Verify proof on-chain
-  const verifyProofOnChain = useCallback(async () => {
-    if (!proofSubmissionData) return;
-
-    try {
-      console.log('\n🔍 Verifying proof storage on-chain...');
-      
-      const l1Client = createPublicClient({
-        transport: http(RPC_URLS.L1),
-      });
-
-      const { address: accountAddress } = useAccount();
-      if (!accountAddress) return;
-
-      const proofResult = await l1Client.readContract({
-        address: CONTRACT_ADDRESSES.OPTIMISM_PORTAL as `0x${string}`,
-        abi: optimismPortalAbi,
-        functionName: 'provenWithdrawals',
-        args: [proofSubmissionData.withdrawalDetails.withdrawalHash as `0x${string}`, accountAddress as `0x${string}`]
-      });
-
-      const [outputRoot, timestamp, l2OutputIndex] = proofResult as [string, bigint, bigint];
-
-      if (outputRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-        console.log('\n📋 Proof Details:');
-        console.log(`   Output Root: ${outputRoot}`);
-        console.log(`   Timestamp: ${new Date(Number(timestamp) * 1000).toISOString()}`);
-        console.log(`   L2 Output Index: ${Number(l2OutputIndex)}`);
-        console.log('✅ Proof verified on-chain!');
-      } else {
-        console.log('⚠️ Proof not found on-chain');
-      }
-    } catch (error) {
-      console.log('⚠️ Could not verify proof on-chain:', error);
-    }
-  }, [proofSubmissionData]);
 
   // Function to log receipt details and extract MessagePassed event using viem
   const logReceiptDetails = useCallback(async (txHash: string) => {
@@ -1157,7 +1169,7 @@ export function BridgeInterface() {
         });
         
         // Extract withdrawal details
-        const eventData = (decoded as { args: MessagePassedEventData }).args;
+        const eventData = (decoded as { args: { nonce: bigint; sender: string; target: string; value: bigint; gasLimit: bigint; data: string; withdrawalHash: string } }).args;
         withdrawalHash = eventData.withdrawalHash;
         withdrawalDetails = {
           nonce: eventData.nonce.toString(),
@@ -1253,7 +1265,7 @@ export function BridgeInterface() {
   const { writeContract: writeL2BridgeErc20, isPending: isL2BridgeErc20Pending, error: l2BridgeErc20Error, data: l2TxData } = useWriteL2BridgeBridgeErc20();
   
   // Wait for L2 transaction receipt
-  const { data: l2TxReceipt, isLoading: isL2TxPending } = useWaitForTransactionReceipt({
+  const { data: l2TxReceipt } = useWaitForTransactionReceipt({
     hash: l2TxHash as `0x${string}`,
     chainId: CHAIN_IDS.L2,
     query: {
@@ -1549,7 +1561,7 @@ export function BridgeInterface() {
     } catch (error) {
       console.error("Transaction failed:", error);
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, addPendingTransaction, toToken.symbol, updateTransactionStatus]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -1590,9 +1602,11 @@ export function BridgeInterface() {
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
                 {fromToken.logo.startsWith('http') ? (
-                  <img 
+                  <Image 
                     src={fromToken.logo} 
                     alt={fromToken.symbol}
+                    width={16}
+                    height={16}
                     className="w-4 h-4 rounded-full object-cover"
                   />
                 ) : (
@@ -1655,9 +1669,11 @@ export function BridgeInterface() {
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
               {toToken.logo.startsWith('http') ? (
-                <img 
+                <Image 
                   src={toToken.logo} 
                   alt={toToken.symbol}
+                  width={16}
+                  height={16}
                   className="w-4 h-4 rounded-full object-cover"
                 />
               ) : (
@@ -1667,15 +1683,15 @@ export function BridgeInterface() {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="text-foreground font-medium">{toToken.name}</span>
-                  {toToken.layer && (
-                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${
-                      toToken.layer === 'L1' 
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                    }`}>
+                {toToken.layer && (
+                  <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                    toToken.layer === 'L1' 
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                      : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                  }`}>
                       {toToken.layer} {toToken.layer === 'L1' ? '(Poseidon)' : '(Subnet 0)'}
-                    </span>
-                  )}
+                  </span>
+                )}
               </div>
               <div className="text-muted-foreground text-sm">{toToken.balance} {toToken.symbol}</div>
             </div>
@@ -1708,14 +1724,14 @@ export function BridgeInterface() {
             {isSwitchingChain ? "Switching..." : `Switch to ${requiredNetwork.name}`}
           </Button>
         ) : (
-          <Button
-            className="w-full mt-6"
-            variant="outline"
-            onClick={handleTransact}
-            disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || (isL2ToL1 && fromToken.symbol === 'ETH')}
-          >
-            {isL2ToL1 && fromToken.symbol === 'ETH' ? "ETH L2->L1 Disabled" : isTransactionPending ? "Processing..." : "Transact"}
-          </Button>
+        <Button
+          className="w-full mt-6"
+          variant="outline"
+          onClick={handleTransact}
+          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || (isL2ToL1 && fromToken.symbol === 'ETH')}
+        >
+          {isL2ToL1 && fromToken.symbol === 'ETH' ? "ETH L2->L1 Disabled" : isTransactionPending ? "Processing..." : "Transact"}
+        </Button>
         )}
         </div>
 
