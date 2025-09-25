@@ -26,7 +26,7 @@ export function PendingTransactionsTab() {
           variant="outline"
           size="sm"
           onClick={() => setIsModalOpen(true)}
-          className="bg-card/80 backdrop-blur-sm border-2 border-yellow-400/50 hover:border-yellow-400/80 shadow-lg hover:shadow-xl transition-all duration-200"
+          className="bg-card/80 backdrop-blur-sm border transition-all duration-200 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           <div className="flex items-center space-x-2">
             <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+
 export interface PendingTransaction {
   id: string;
   type: 'L2_TO_L1_PSDN';
@@ -76,6 +77,18 @@ export function usePendingTransactions() {
     setForceUpdate(prev => prev + 1);
   }, []);
 
+
+  const updateTransactionHash = useCallback((id: string, txHash: string) => {
+    setPendingTransactions(prev => 
+      prev.map(tx => 
+        tx.id === id 
+          ? { ...tx, txHash }
+          : tx
+      )
+    );
+    setForceUpdate(prev => prev + 1);
+  }, []);
+
   const pendingCount = pendingTransactions.filter(tx => tx.status === 'pending').length;
 
   return {
@@ -83,6 +96,7 @@ export function usePendingTransactions() {
     pendingCount,
     addPendingTransaction,
     updateTransactionStatus,
+    updateTransactionHash,
     removeTransaction,
     clearCompletedTransactions,
     forceUpdate, // For debugging

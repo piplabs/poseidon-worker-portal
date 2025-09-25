@@ -43,6 +43,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
     }
   };
 
+
   const formatAmount = (amount: string) => {
     try {
       const formatted = formatUnits(BigInt(amount), TOKEN_DECIMALS);
@@ -116,7 +117,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                       >
                         <div className="flex items-center space-x-3">
                           {getStatusIcon(transaction.status)}
-                          <div>
+                          <div className="flex-1">
                             <div className="font-medium">
                               {transaction.fromToken} → {transaction.toToken}
                             </div>
@@ -126,6 +127,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                             <div className="text-xs text-muted-foreground">
                               {formatTime(transaction.timestamp)}
                             </div>
+                            
                           </div>
                         </div>
                         
