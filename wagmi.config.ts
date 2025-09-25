@@ -1,6 +1,6 @@
 import { defineConfig } from '@wagmi/cli'
 import { react } from '@wagmi/cli/plugins'
-import { mintPsdnAbi, bridgeAbi, l2BridgeAbi } from './src/lib/abi'
+import { mintPsdnAbi, bridgeAbi, l2BridgeAbi } from './src/generated'
 
 
 export default defineConfig({
@@ -29,7 +29,7 @@ export default defineConfig({
   address: {
     11711: '0x4200000000000000000000000000000000000010',
   }
- }
+ }, 
   ],
   plugins: [ react() ],
 })
