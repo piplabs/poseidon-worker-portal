@@ -146,35 +146,3 @@ export function TokenSelector({
   );
 }
 
-interface TokenButtonProps {
-  token: Token;
-  onClick: () => void;
-  disabled?: boolean;
-}
-
-export function TokenButton({ token, onClick, disabled }: TokenButtonProps) {
-  return (
-    <Button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center space-x-3 px-4 py-3 bg-background/50 border border-input/20 rounded-lg hover:bg-background/80 hover:border-input/40 transition-all duration-200"
-    >
-      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-        {token.logo.startsWith('http') ? (
-          <img 
-            src={token.logo} 
-            alt={token.symbol}
-            className="w-4 h-4 rounded-full object-cover"
-          />
-        ) : (
-          <span className="text-white font-bold text-xs">{token.logo}</span>
-        )}
-      </div>
-      <div className="flex-1 text-left">
-        <div className="font-medium text-foreground">{token.symbol}</div>
-        <div className="text-xs text-muted-foreground">{token.name}</div>
-      </div>
-      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-    </Button>
-  );
-}

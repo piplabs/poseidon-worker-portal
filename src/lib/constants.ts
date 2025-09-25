@@ -3,10 +3,18 @@ export const CHAIN_IDS = {
   L2: 11711,
 } as const;
 
+export const RPC_URLS = {
+  L1: "https://rpc.poseidon.storyrpc.io/",
+  L2: "https://devnet-subnet0.psdnrpc.io",
+} as const;
+
 export const CONTRACT_ADDRESSES = {
   PSDN_L1: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
   PSDN_L2: "0x30f627A3de293d408E89D4C3E40a41bbF638bC36",
   BRIDGE: "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae",
+  L2_TO_L1_MESSAGE_PASSER: "0x4200000000000000000000000000000000000016", // Standard Optimism-style message passer
+  DISPUTE_GAME_FACTORY: "0x0d10e01efbe6e47b3d25f83a7a0d9b5e59116936",
+  OPTIMISM_PORTAL: "0x8ac124c4dac740eea694d1cab914740c44f6ee8f", // L1 OptimismPortal contract
 } as const;
 
 export const TOKEN_DECIMALS = 18;
@@ -14,7 +22,6 @@ export const DEFAULT_BALANCE = "0.00";
 export const ZERO_AMOUNT = "0";
 
 export const POLLING_INTERVAL = 10000;
-export const SWAP_ANIMATION_DELAY = 0;
 export const SWAP_ANIMATION_DURATION = 0;
 export const MIN_GAS_LIMIT = 200000;
 export const MAX_UINT256 = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";

@@ -8,6 +8,7 @@ interface PendingTransactionsContextType {
   pendingCount: ReturnType<typeof usePendingTransactions>['pendingCount'];
   addPendingTransaction: ReturnType<typeof usePendingTransactions>['addPendingTransaction'];
   updateTransactionStatus: ReturnType<typeof usePendingTransactions>['updateTransactionStatus'];
+  updateTransactionHash: ReturnType<typeof usePendingTransactions>['updateTransactionHash'];
   removeTransaction: ReturnType<typeof usePendingTransactions>['removeTransaction'];
   clearCompletedTransactions: ReturnType<typeof usePendingTransactions>['clearCompletedTransactions'];
   forceUpdate: ReturnType<typeof usePendingTransactions>['forceUpdate'];
