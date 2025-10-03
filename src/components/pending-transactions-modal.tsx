@@ -77,9 +77,9 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
   const getBlockExplorerUrl = (txHash: string, chainId: number) => {
     // TODO: Update with actual block explorer URLs
     if (chainId === CHAIN_IDS.L1) {
-      return `https://explorer-l1.example.com/tx/${txHash}`;
+      return `https://poseidon.storyscan.io/tx/${txHash}`;
     }
-    return `https://explorer-l2.example.com/tx/${txHash}`;
+    return `https://devnet-subnet0.psdnscan.io/tx/${txHash}`;
   };
 
   return (
@@ -223,7 +223,27 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-primary hover:underline"
                         >
-                          L1 Proof Tx <ExternalLink className="h-3 w-3" />
+                          Proof [L1] <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {tx.l1ResolveClaimsTxHash && (
+                        <a
+                          href={getBlockExplorerUrl(tx.l1ResolveClaimsTxHash, CHAIN_IDS.L1)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                        >
+                          Claims [L1] <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {tx.l1ResolveGameTxHash && (
+                        <a
+                          href={getBlockExplorerUrl(tx.l1ResolveGameTxHash, CHAIN_IDS.L1)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                        >
+                          Game [L1] <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                       {tx.l1FinalizeTxHash && (
@@ -233,7 +253,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-primary hover:underline"
                         >
-                          L1 Finalize Tx <ExternalLink className="h-3 w-3" />
+                          Finalize [L1] <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                     </div>
