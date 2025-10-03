@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ExternalLink, CheckCircle2, Loader2, XCircle, Clock, Trash2 } from "lucide-react";
+import { X, ExternalLink, CheckCircle2, Loader2, XCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWithdrawalTransactions, type TransactionStatus, TransactionStorage } from "@/lib/transaction-tracker";
 import { CHAIN_IDS } from "@/lib/constants";
@@ -163,7 +163,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
             <div className="overflow-y-auto max-h-[calc(80vh-120px)] p-4 space-y-3">
               {displayTransactions.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <Loader2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No {selectedTab} transactions</p>
                 </div>
               ) : (

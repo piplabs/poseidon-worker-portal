@@ -32,8 +32,7 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
     log.address.toLowerCase() === CONTRACT_ADDRESSES.L2_TO_L1_MESSAGE_PASSER.toLowerCase()
   );
   
-  let withdrawalHash = null;
-  let withdrawalDetails = null;
+  let withdrawalDetails: MessagePassedEventData | null = null;
   
   if (messagePassedLog) {
     // Decode the MessagePassed event
@@ -57,7 +56,7 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
     
     // Extract withdrawal details
     const eventData = (decoded as { args: { nonce: bigint; sender: string; target: string; value: bigint; gasLimit: bigint; data: string; withdrawalHash: string } }).args;
-    withdrawalHash = eventData.withdrawalHash;
+    const withdrawalHash = eventData.withdrawalHash;
     withdrawalDetails = {
       nonce: eventData.nonce.toString(),
       sender: eventData.sender,
@@ -65,7 +64,7 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
       value: eventData.value.toString(),
       gasLimit: eventData.gasLimit.toString(),
       data: eventData.data,
-      withdrawalHash: withdrawalHash
+      withdrawalHash
     };
     
     console.log('\n📋 MessagePassed Event Details:');
@@ -85,4 +84,3 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
     blockNumber: receipt.blockNumber
   };
 }
-

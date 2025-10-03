@@ -53,16 +53,14 @@ import {
   type MessagePassedEventData,
   type DisputeGameData,
   type ProofData,
-  waitForDisputeGame as waitForDisputeGameImported,
-  generateProof as generateProofImported,
+  waitForDisputeGame,
+  generateProof,
   submitProof as submitProofImported,
   resolveGame as resolveGameImported,
   finalizeWithdrawal as finalizeWithdrawalImported,
-  optimismPortalAbi as importedOptimismPortalAbi,
 } from "@/lib/l2-to-l1";
 import {
   TransactionStorage,
-  useWithdrawalTransactions,
   type TransactionStatus,
 } from "@/lib/transaction-tracker";
 
@@ -75,7 +73,6 @@ export function BridgeInterface() {
   const [toAmount, setToAmount] = useState(ZERO_AMOUNT);
   const [bridgeOption] = useState<BridgeOption>(DEFAULT_BRIDGE_OPTION);
   const [isSwapping, setIsSwapping] = useState(false);
-  const [showCalculation, setShowCalculation] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
   const [l2TxHash, setL2TxHash] = useState<string | null>(null);
   
@@ -91,19 +88,7 @@ export function BridgeInterface() {
     console.log(`[${type.toUpperCase()}] ${message}`);
   }, []);
   
-  // L2 to L1 withdrawal functions are now imported from /lib/l2-to-l1/
-  // Use imported waitForDisputeGame function
-  const waitForDisputeGame = useCallback(async (l2BlockNumber: number) => {
-    return await waitForDisputeGameImported(l2BlockNumber);
-  }, []);
-
-  // Use imported generateProof function
-  const generateProof = useCallback(async (withdrawalDetails: MessagePassedEventData, l2BlockNumber: number, disputeGame: DisputeGameData) => {
-    return await generateProofImported(withdrawalDetails, l2BlockNumber, disputeGame);
-  }, []);
-
-  // Use imported OptimismPortal ABI
-  const optimismPortalAbi = importedOptimismPortalAbi;
+  // L2 to L1 withdrawal functions are imported from /lib/l2-to-l1/
 
   // State for proof submission
   const [proofSubmissionData, setProofSubmissionData] = useState<{
@@ -128,23 +113,23 @@ export function BridgeInterface() {
   const [isWithdrawalComplete, setIsWithdrawalComplete] = useState(false);
 
   // Wagmi hooks for L1 transactions
-  const { writeContract: writeProofContract, data: proofTxHash, isPending: isProofPending, error: proofError } = useWriteContract();
+  const { writeContract: writeProofContract, data: proofTxHash, error: proofError } = useWriteContract();
   const { writeContract: writeResolveClaimsContract, data: resolveClaimsTxHash } = useWriteContract();
   const { writeContract: writeResolveGameContract, data: resolveGameTxHash } = useWriteContract();
   const { writeContract: writeFinalizeContract, data: finalizeTxHash } = useWriteContract();
 
-  // Use imported submitProof function
-  const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: ProofData) => {
-    // Wrap switchChain to return a Promise
-    const switchChainAsync = async (params: { chainId: number }) => {
-      return new Promise<void>((resolve, reject) => {
-        switchChain(params, {
-          onSuccess: () => resolve(),
-          onError: (error) => reject(error),
-        });
+  // Wrap switchChain to return a Promise for submitProof
+  const switchChainAsync = useCallback(async (params: { chainId: number }) => {
+    return new Promise<void>((resolve, reject) => {
+      switchChain(params, {
+        onSuccess: () => resolve(),
+        onError: (error) => reject(error),
       });
-    };
+    });
+  }, [switchChain]);
 
+  // Submit proof to L1
+  const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: ProofData) => {
     return await submitProofImported({
       withdrawalDetails,
       disputeGame,
@@ -154,7 +139,7 @@ export function BridgeInterface() {
       writeProofContract,
       addNotification,
     });
-  }, [chainId, switchChain, writeProofContract, addNotification]);
+  }, [chainId, switchChainAsync, writeProofContract, addNotification]);
 
   // Wait for proof transaction confirmation
   const { isLoading: isProofConfirming, isSuccess: isProofConfirmed } = useWaitForTransactionReceipt({
@@ -186,7 +171,7 @@ export function BridgeInterface() {
       setIsWithdrawalComplete,
       isWithdrawalComplete,
       updateTransactionStatus: txId ? (status: string) => {
-        TransactionStorage.update({ id: txId, status: status as any });
+        TransactionStorage.update({ id: txId, status: status as TransactionStatus });
       } : undefined,
     });
   }, [address, writeFinalizeContract, setIsWithdrawalComplete, isWithdrawalComplete]);
@@ -201,7 +186,7 @@ export function BridgeInterface() {
       isWithdrawalComplete,
       setIsResolvingGame,
       updateTransactionStatus: txId ? (status: string) => {
-        TransactionStorage.update({ id: txId, status: status as any });
+        TransactionStorage.update({ id: txId, status: status as TransactionStatus });
       } : undefined,
     });
   }, [writeResolveClaimsContract, writeResolveGameContract, isResolvingGame, isWithdrawalComplete, setIsResolvingGame]);
@@ -1116,7 +1101,6 @@ export function BridgeInterface() {
     if (isSwapping) return;
     
     setIsSwapping(true);
-    setShowCalculation(true);
     
     // Swap tokens immediately
     const temp = fromToken;
@@ -1126,7 +1110,6 @@ export function BridgeInterface() {
     // Reset swap state after animation
     setTimeout(() => {
       setIsSwapping(false);
-      setShowCalculation(false);
     }, SWAP_ANIMATION_DURATION);
   }, [isSwapping, fromToken, toToken]);
 
