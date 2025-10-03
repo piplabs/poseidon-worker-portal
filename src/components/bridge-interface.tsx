@@ -15,7 +15,8 @@ import {
   useWriteMintPsdnApprove,
   useWriteBridgeBridgeEthTo,
   useWriteBridgeDepositErc20To,
-  useWriteL2BridgeBridgeErc20
+  useWriteL2BridgeBridgeErc20,
+  useWriteL2BridgeBridgeEth
 } from "@/generated";
 import {
   CHAIN_IDS,
@@ -750,9 +751,10 @@ export function BridgeInterface() {
   
   // Transaction hooks
   const { writeContract: writeApprove, isPending: isApprovePending, error: approveError } = useWriteMintPsdnApprove();
-  const { writeContract: writeBridgeEth, isPending: isBridgeEthPending, error: bridgeEthError } = useWriteBridgeBridgeEthTo();
-  const { writeContract: writeDepositErc20, isPending: isDepositErc20Pending, error: depositErc20Error } = useWriteBridgeDepositErc20To();
+  const { writeContract: writeBridgeEth, isPending: isBridgeEthPending, error: bridgeEthError, data: bridgeEthTxData } = useWriteBridgeBridgeEthTo();
+  const { writeContract: writeDepositErc20, isPending: isDepositErc20Pending, error: depositErc20Error, data: depositErc20TxData } = useWriteBridgeDepositErc20To();
   const { writeContract: writeL2BridgeErc20, isPending: isL2BridgeErc20Pending, error: l2BridgeErc20Error, data: l2TxData } = useWriteL2BridgeBridgeErc20();
+  const { writeContract: writeL2BridgeEth, isPending: isL2BridgeEthPending, error: l2BridgeEthError, data: l2EthTxData } = useWriteL2BridgeBridgeEth();
   
   // Wait for L2 transaction receipt
   const { data: l2TxReceipt } = useWaitForTransactionReceipt({
@@ -763,49 +765,65 @@ export function BridgeInterface() {
     },
   });
 
-  // Update tokens when bridge option changes
+  // Update tokens when bridge option changes (only when explicitly selected by user via token selector)
+  // Note: This effect is intentionally minimal - swapping should NOT trigger token changes
   useEffect(() => {
-    if (isL1OnTop) {
+    // Only update if we're in the default L1->L2 direction AND the current token doesn't match the bridge option
+    if (isL1OnTop && fromToken.symbol !== (bridgeOption === 'psdn' ? 'PSDN' : 'ETH')) {
       const newFromToken = bridgeOption === 'psdn' ? PSDN_L1_TOKEN : ETH_L1_TOKEN;
       const newToToken = bridgeOption === 'psdn' ? PSDN_L2_TOKEN : ETH_L2_TOKEN;
       
-      setFromToken(newFromToken);
-      setToToken(newToToken);
+      // Only update if this is actually a change from the user selecting a different token
+      // Don't update if the user has swapped to L2->L1 (this would force unwanted changes)
+      if (fromToken.layer === 'L1' && toToken.layer === 'L2') {
+        setFromToken(newFromToken);
+        setToToken(newToToken);
+      }
     }
-  }, [bridgeOption, isL1OnTop]);
+  }, [bridgeOption]);
   
-  // Balance hooks
-  const { data: psdnBalance, refetch: refetchPsdnBalance } = useReadMintPsdnBalanceOf({
+  // Balance hooks - Fetch balances from both L1 and L2 networks
+  const { data: psdnBalance, refetch: refetchPsdnBalance, isLoading: isPsdnBalanceLoading } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
+      retry: 3,
+      retryDelay: 1000,
     },
     chainId: CHAIN_IDS.L1,
   });
 
-  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
+  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance, isLoading: isPsdnL2BalanceLoading } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
+      retry: 3,
+      retryDelay: 1000,
     },
     chainId: CHAIN_IDS.L2,
   });
 
-  const { data: ethBalance, refetch: refetchEthBalance } = useBalance({
+  const { data: ethBalance, refetch: refetchEthBalance, isLoading: isEthBalanceLoading } = useBalance({
     address,
     chainId: CHAIN_IDS.L1,
     query: {
+      enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
+      retry: 3,
+      retryDelay: 1000,
     },
   });
 
-  const { data: ethL2Balance, refetch: refetchEthL2Balance } = useBalance({
+  const { data: ethL2Balance, refetch: refetchEthL2Balance, isLoading: isEthL2BalanceLoading } = useBalance({
     address,
     chainId: CHAIN_IDS.L2,
     query: {
+      enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
+      retry: 3,
+      retryDelay: 1000,
     },
   });
 
@@ -814,22 +832,42 @@ export function BridgeInterface() {
     query: { 
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
+      retry: 3,
+      retryDelay: 1000,
     },
     chainId: CHAIN_IDS.L1,
   });
 
-  // Balance update effects
+  // Balance update effects - Update tokens with correct balances based on layer and symbol
   useEffect(() => {
     if (psdnBalance !== undefined) {
       const balanceStr = formatBalance(psdnBalance);
-      setFromToken(prev => ({ ...prev, balance: balanceStr }));
+      setFromToken(prev => 
+        prev.symbol === 'PSDN' && prev.layer === 'L1' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
+      setToToken(prev => 
+        prev.symbol === 'PSDN' && prev.layer === 'L1' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
     }
   }, [psdnBalance]);
 
   useEffect(() => {
     if (psdnL2Balance !== undefined) {
       const balanceStr = formatBalance(psdnL2Balance);
-      setToToken(prev => ({ ...prev, balance: balanceStr }));
+      setFromToken(prev => 
+        prev.symbol === 'PSDN' && prev.layer === 'L2' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
+      setToToken(prev => 
+        prev.symbol === 'PSDN' && prev.layer === 'L2' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
     }
   }, [psdnL2Balance]);
 
@@ -837,7 +875,14 @@ export function BridgeInterface() {
     if (ethBalance !== undefined) {
       const balanceStr = formatBalanceFromValue(ethBalance);
       setFromToken(prev => 
-        prev.symbol === 'ETH' ? { ...prev, balance: balanceStr } : prev
+        prev.symbol === 'ETH' && prev.layer === 'L1' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
+      setToToken(prev => 
+        prev.symbol === 'ETH' && prev.layer === 'L1' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
       );
     }
   }, [ethBalance]);
@@ -845,6 +890,11 @@ export function BridgeInterface() {
   useEffect(() => {
     if (ethL2Balance !== undefined) {
       const balanceStr = formatBalanceFromValue(ethL2Balance);
+      setFromToken(prev => 
+        prev.symbol === 'ETH' && prev.layer === 'L2' 
+          ? { ...prev, balance: balanceStr } 
+          : prev
+      );
       setToToken(prev => 
         prev.symbol === 'ETH' && prev.layer === 'L2' 
           ? { ...prev, balance: balanceStr } 
@@ -853,9 +903,130 @@ export function BridgeInterface() {
     }
   }, [ethL2Balance]);
 
+  // Force refetch balances when wallet connects or changes
+  useEffect(() => {
+    if (address) {
+      console.log('💰 Wallet connected, fetching all balances...');
+      refetchPsdnBalance();
+      refetchPsdnL2Balance();
+      refetchEthBalance();
+      refetchEthL2Balance();
+      refetchAllowance();
+    }
+  }, [address, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+
+  // Refetch balances when user swaps (after animation completes)
+  useEffect(() => {
+    if (!isSwapping && address) {
+      // Small delay to ensure state is settled
+      const timer = setTimeout(() => {
+        console.log('🔄 Swap complete, refreshing balances...');
+        refetchPsdnBalance();
+        refetchPsdnL2Balance();
+        refetchEthBalance();
+        refetchEthL2Balance();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isSwapping, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance]);
+
+  // Refetch balances when network changes
+  useEffect(() => {
+    if (address && chainId) {
+      console.log(`🌐 Network changed to ${chainId}, refreshing balances...`);
+      refetchPsdnBalance();
+      refetchPsdnL2Balance();
+      refetchEthBalance();
+      refetchEthL2Balance();
+      refetchAllowance();
+    }
+  }, [chainId, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+
   // Balance polling is now handled by refetchInterval in the hooks above
 
-  // Handle L2 transaction hash when it becomes available
+  // Handle L1 to L2 ETH bridge transaction
+  useEffect(() => {
+    if (bridgeEthTxData && address) {
+      const existingTx = TransactionStorage.getById(bridgeEthTxData);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: bridgeEthTxData,
+          l1TxHash: bridgeEthTxData,
+          status: 'pending',
+          type: 'L1_TO_L2',
+          token: 'ETH',
+          amount: fromAmount,
+          fromAddress: address,
+        });
+        console.log(`📝 Created L1→L2 ETH transaction record: ${bridgeEthTxData}`);
+      }
+    }
+  }, [bridgeEthTxData, address, fromAmount]);
+
+  // Handle L1 to L2 PSDN bridge transaction
+  useEffect(() => {
+    if (depositErc20TxData && address) {
+      const existingTx = TransactionStorage.getById(depositErc20TxData);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: depositErc20TxData,
+          l1TxHash: depositErc20TxData,
+          status: 'pending',
+          type: 'L1_TO_L2',
+          token: 'PSDN',
+          amount: fromAmount,
+          fromAddress: address,
+        });
+        console.log(`📝 Created L1→L2 PSDN transaction record: ${depositErc20TxData}`);
+      }
+    }
+  }, [depositErc20TxData, address, fromAmount]);
+
+  // Wait for L1 to L2 ETH transaction confirmation
+  const { isSuccess: isBridgeEthConfirmed } = useWaitForTransactionReceipt({
+    hash: bridgeEthTxData as `0x${string}`,
+    chainId: CHAIN_IDS.L1,
+  });
+
+  // Wait for L1 to L2 PSDN transaction confirmation
+  const { isSuccess: isDepositErc20Confirmed } = useWaitForTransactionReceipt({
+    hash: depositErc20TxData as `0x${string}`,
+    chainId: CHAIN_IDS.L1,
+  });
+
+  // Mark L1 to L2 ETH transaction as completed
+  useEffect(() => {
+    if (isBridgeEthConfirmed && bridgeEthTxData) {
+      const tx = TransactionStorage.getById(bridgeEthTxData);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: bridgeEthTxData,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+        console.log(`✅ L1→L2 ETH transaction completed: ${bridgeEthTxData}`);
+      }
+    }
+  }, [isBridgeEthConfirmed, bridgeEthTxData]);
+
+  // Mark L1 to L2 PSDN transaction as completed
+  useEffect(() => {
+    if (isDepositErc20Confirmed && depositErc20TxData) {
+      const tx = TransactionStorage.getById(depositErc20TxData);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: depositErc20TxData,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+        console.log(`✅ L1→L2 PSDN transaction completed: ${depositErc20TxData}`);
+      }
+    }
+  }, [isDepositErc20Confirmed, depositErc20TxData]);
+
+  // Handle L2 to L1 PSDN transaction hash when it becomes available
   useEffect(() => {
     if (l2TxData && address) {
       // Check if transaction already exists to prevent duplicates
@@ -868,19 +1039,46 @@ export function BridgeInterface() {
           l2TxHash: l2TxData,
           status: 'pending',
           type: 'L2_TO_L1',
-          token: fromToken.symbol,
+          token: 'PSDN',
           amount: fromAmount,
           fromAddress: address,
         });
         
-        console.log(`📝 Created transaction record: ${l2TxData}`);
+        console.log(`📝 Created L2→L1 PSDN transaction record: ${l2TxData}`);
       } else {
         console.log(`ℹ️ Transaction ${l2TxData} already exists, skipping creation`);
       }
       
       setL2TxHash(l2TxData);
     }
-  }, [l2TxData, address, fromToken.symbol, fromAmount]);
+  }, [l2TxData, address, fromAmount]);
+
+  // Handle L2 to L1 ETH transaction hash when it becomes available
+  useEffect(() => {
+    if (l2EthTxData && address) {
+      // Check if transaction already exists to prevent duplicates
+      const existingTx = TransactionStorage.getById(l2EthTxData);
+      
+      if (!existingTx) {
+        // Create transaction record in localStorage only if it doesn't exist
+        TransactionStorage.create({
+          id: l2EthTxData,
+          l2TxHash: l2EthTxData,
+          status: 'pending',
+          type: 'L2_TO_L1',
+          token: 'ETH',
+          amount: fromAmount,
+          fromAddress: address,
+        });
+        
+        console.log(`📝 Created L2→L1 ETH transaction record: ${l2EthTxData}`);
+      } else {
+        console.log(`ℹ️ Transaction ${l2EthTxData} already exists, skipping creation`);
+      }
+      
+      setL2TxHash(l2EthTxData);
+    }
+  }, [l2EthTxData, address, fromAmount]);
 
   // Handle L2 transaction receipt
   useEffect(() => {
@@ -1020,11 +1218,20 @@ export function BridgeInterface() {
       const amount = parseUnits(fromAmount, TOKEN_DECIMALS);
 
       if (fromToken.symbol === 'ETH') {
-        // For ETH, use bridgeEthTo call
-        await writeBridgeEth({
-          args: [address, MIN_GAS_LIMIT, EMPTY_EXTRA_DATA],
-          value: amount,
-        });
+        // For ETH, handle both L1->L2 and L2->L1
+        if (isL2ToL1) {
+          // L2 -> L1: Use L2Bridge bridgeETH
+          await writeL2BridgeEth({
+            args: [MIN_GAS_LIMIT, EMPTY_EXTRA_DATA],
+            value: amount,
+          });
+        } else {
+          // L1 -> L2: Use bridgeEthTo
+          await writeBridgeEth({
+            args: [address, MIN_GAS_LIMIT, EMPTY_EXTRA_DATA],
+            value: amount,
+          });
+        }
       } else {
         // For PSDN, handle both L1->L2 and L2->L1
         if (isL2ToL1) {
@@ -1077,7 +1284,7 @@ export function BridgeInterface() {
     } catch (error) {
       console.error("Transaction failed:", error);
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -1087,14 +1294,14 @@ export function BridgeInterface() {
     [isL1OnTop, psdnBalance, ethBalance, psdnL2Balance, ethL2Balance]
   );
 
-  const isTransactionPending = useMemo(() => 
-    isApprovePending || isBridgeEthPending || isDepositErc20Pending || isL2BridgeErc20Pending,
-    [isApprovePending, isBridgeEthPending, isDepositErc20Pending, isL2BridgeErc20Pending]
+  const isTransactionPending = useMemo(() =>
+    isApprovePending || isBridgeEthPending || isDepositErc20Pending || isL2BridgeErc20Pending || isL2BridgeEthPending,
+    [isApprovePending, isBridgeEthPending, isDepositErc20Pending, isL2BridgeErc20Pending, isL2BridgeEthPending]
   );
 
   const hasError = useMemo(() => 
-    approveError || bridgeEthError || depositErc20Error || l2BridgeErc20Error,
-    [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error]
+    approveError || bridgeEthError || depositErc20Error || l2BridgeErc20Error || l2BridgeEthError,
+    [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error, l2BridgeEthError]
   );
 
   return (
@@ -1246,9 +1453,9 @@ export function BridgeInterface() {
           className="w-full mt-6"
           variant="outline"
           onClick={handleTransact}
-          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || (isL2ToL1 && fromToken.symbol === 'ETH')}
+          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
         >
-          {isL2ToL1 && fromToken.symbol === 'ETH' ? "ETH L2->L1 Disabled" : isTransactionPending ? "Processing..." : "Transact"}
+          {isTransactionPending ? "Processing..." : "Transact"}
         </Button>
         )}
         </div>
