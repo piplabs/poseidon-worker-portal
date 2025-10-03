@@ -13,6 +13,7 @@ export interface FinalizeWithdrawalParams {
   }) => void;
   setIsWithdrawalComplete: (value: boolean) => void;
   isWithdrawalComplete?: boolean;
+  updateTransactionStatus?: (status: string) => void; // Optional callback to update status
 }
 
 export async function finalizeWithdrawal({
@@ -21,6 +22,7 @@ export async function finalizeWithdrawal({
   writeProofContract,
   setIsWithdrawalComplete,
   isWithdrawalComplete = false,
+  updateTransactionStatus,
 }: FinalizeWithdrawalParams): Promise<boolean> {
   // Prevent multiple finalization attempts
   if (isWithdrawalComplete) {
@@ -109,6 +111,12 @@ export async function finalizeWithdrawal({
     console.log('\n🔧 Finalizing withdrawal transaction...');
     console.log(`   Withdrawal Tuple:`, withdrawalTuple);
 
+    // Update status to waiting_finalize_signature right before prompting wallet
+    if (updateTransactionStatus) {
+      updateTransactionStatus('waiting_finalize_signature');
+      console.log('   📝 Status updated: waiting_finalize_signature');
+    }
+
     // Finalize withdrawal using writeContract
     writeProofContract({
       address: CONTRACT_ADDRESSES.OPTIMISM_PORTAL as `0x${string}`,
@@ -117,7 +125,7 @@ export async function finalizeWithdrawal({
       args: [withdrawalTuple],
     });
 
-    console.log('✅ Finalization transaction sent!');
+    console.log('✅ Finalization transaction sent to wallet!');
     console.log('   The confirmation will be handled by the useWaitForTransactionReceipt hook');
     console.log('   Balance checks and completion will happen after confirmation');
     

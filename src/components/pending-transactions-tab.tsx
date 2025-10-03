@@ -9,11 +9,13 @@ import { useWithdrawalTransactions } from "@/lib/transaction-tracker";
 
 export function PendingTransactionsTab() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { activeTransactions } = useWithdrawalTransactions();
+  const { activeTransactions, completedTransactions } = useWithdrawalTransactions();
   
   const pendingCount = activeTransactions.length;
+  const totalCount = activeTransactions.length + completedTransactions.length;
 
-  if (pendingCount === 0) {
+  // Show tab if there are any active or completed transactions
+  if (totalCount === 0) {
     return null;
   }
 
@@ -31,15 +33,25 @@ export function PendingTransactionsTab() {
           className="bg-card/80 backdrop-blur-sm border transition-all duration-200 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           <div className="flex items-center space-x-2">
-            <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
-            <span className="font-medium">Withdrawals</span>
+            {pendingCount > 0 ? (
+              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+            ) : (
+              <svg className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            <span className="font-medium">Pending</span>
             <motion.span
-              key={pendingCount}
+              key={totalCount}
               initial={{ scale: 1.2 }}
               animate={{ scale: 1 }}
-              className="bg-yellow-500 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center"
+              className={`text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center ${
+                pendingCount > 0 
+                  ? 'bg-blue-500/20 text-blue-600 border border-blue-500/30' 
+                  : 'bg-green-500 text-green-900'
+              }`}
             >
-              {pendingCount}
+              {totalCount}
             </motion.span>
           </div>
         </Button>

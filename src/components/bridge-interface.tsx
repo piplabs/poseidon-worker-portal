@@ -175,169 +175,8 @@ export function BridgeInterface() {
     hash: finalizeTxHash,
   });
 
-  // Handle proof submission
-  const handleSubmitProof = useCallback(async () => {
-    if (!proofSubmissionData) return;
-
-    try {
-      // Check if user is on the correct network (Story Poseidon Devnet L1)
-      console.log(`🔍 Current chain ID: ${chainId}, Target: ${CHAIN_IDS.L1} (Story Poseidon Devnet L1)`);
-      
-      if (chainId !== CHAIN_IDS.L1) {
-        console.log('🔄 Switching to Story Poseidon Devnet L1 for proof submission...');
-        try {
-          await switchChain({ chainId: CHAIN_IDS.L1 });
-          console.log('✅ Switched to Story Poseidon Devnet L1');
-          // Wait a moment for the network switch to complete
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (switchError) {
-          console.error('❌ Failed to switch to Story Poseidon Devnet L1:', switchError);
-          alert('Please switch to Story Poseidon Devnet L1 to submit the proof');
-          return;
-        }
-      } else {
-        console.log('✅ Already on Story Poseidon Devnet L1');
-      }
-
-      const { withdrawalDetails, disputeGame, proofData } = proofSubmissionData;
-      const wd = withdrawalDetails;
-
-      // Validate required data
-      console.log('\n🔍 Validating proof data...');
-      console.log(`   Withdrawal Details:`, wd);
-      console.log(`   Dispute Game:`, disputeGame);
-      console.log(`   Proof Data:`, proofData);
-
-      if (!disputeGame.gameIndex && disputeGame.gameIndex !== 0) {
-        throw new Error('Dispute game index is undefined');
-      }
-      if (!proofData.outputRootProof) {
-        throw new Error('Output root proof is undefined');
-      }
-      if (!proofData.withdrawalProof || !Array.isArray(proofData.withdrawalProof)) {
-        throw new Error('Withdrawal proof is undefined or not an array');
-      }
-
-      // Validate withdrawal details
-      if (!wd.nonce) {
-        throw new Error('Withdrawal nonce is undefined');
-      }
-      if (!wd.sender) {
-        throw new Error('Withdrawal sender is undefined');
-      }
-      if (!wd.target) {
-        throw new Error('Withdrawal target is undefined');
-      }
-      if (wd.value === undefined || wd.value === null) {
-        throw new Error('Withdrawal value is undefined');
-      }
-      if (!wd.gasLimit) {
-        throw new Error('Withdrawal gas limit is undefined');
-      }
-      if (!wd.data) {
-        throw new Error('Withdrawal data is undefined');
-      }
-
-      console.log('\n✅ All validation passed, building withdrawal tuple...');
-
-      // Build withdrawal tuple
-      const withdrawalTuple = {
-        nonce: BigInt(wd.nonce),
-        sender: wd.sender as `0x${string}`,
-        target: wd.target as `0x${string}`,
-        value: BigInt(wd.value),
-        gasLimit: BigInt(wd.gasLimit),
-        data: wd.data as `0x${string}`
-      };
-
-      console.log('\n📋 Withdrawal Tuple:');
-      console.log(`   Nonce: ${withdrawalTuple.nonce}`);
-      console.log(`   Sender: ${withdrawalTuple.sender}`);
-      console.log(`   Target: ${withdrawalTuple.target}`);
-      console.log(`   Value: ${withdrawalTuple.value}`);
-      console.log(`   Gas Limit: ${withdrawalTuple.gasLimit}`);
-      console.log(`   Data: ${withdrawalTuple.data}`);
-
-      // Validate and build output root proof tuple
-      console.log('\n🔍 Validating output root proof...');
-      console.log(`   Version: ${proofData.outputRootProof.version} (type: ${typeof proofData.outputRootProof.version})`);
-      console.log(`   State Root: ${proofData.outputRootProof.stateRoot} (type: ${typeof proofData.outputRootProof.stateRoot})`);
-      console.log(`   Storage Root: ${proofData.outputRootProof.messagePasserStorageRoot} (type: ${typeof proofData.outputRootProof.messagePasserStorageRoot})`);
-      console.log(`   Block Hash: ${proofData.outputRootProof.latestBlockhash} (type: ${typeof proofData.outputRootProof.latestBlockhash})`);
-
-      if (!proofData.outputRootProof.version) {
-        throw new Error('Output root proof version is undefined');
-      }
-      if (!proofData.outputRootProof.stateRoot) {
-        throw new Error('Output root proof state root is undefined');
-      }
-      if (!proofData.outputRootProof.messagePasserStorageRoot) {
-        throw new Error('Output root proof message passer storage root is undefined');
-      }
-      if (!proofData.outputRootProof.latestBlockhash) {
-        throw new Error('Output root proof latest block hash is undefined');
-      }
-
-      const outputRootProofTuple = {
-        version: proofData.outputRootProof.version as `0x${string}`,
-        stateRoot: proofData.outputRootProof.stateRoot as `0x${string}`,
-        messagePasserStorageRoot: proofData.outputRootProof.messagePasserStorageRoot as `0x${string}`,
-        latestBlockhash: proofData.outputRootProof.latestBlockhash as `0x${string}`
-      };
-
-      console.log('\n📋 Output Root Proof Tuple:');
-      console.log(`   Version: ${outputRootProofTuple.version}`);
-      console.log(`   State Root: ${outputRootProofTuple.stateRoot}`);
-      console.log(`   Storage Root: ${outputRootProofTuple.messagePasserStorageRoot}`);
-      console.log(`   Block Hash: ${outputRootProofTuple.latestBlockhash}`);
-
-      // Validate and build withdrawal proof array
-      console.log('\n🔍 Validating withdrawal proof array...');
-      console.log(`   Proof Array Length: ${proofData.withdrawalProof.length}`);
-      console.log(`   Proof Array:`, proofData.withdrawalProof);
-
-      if (!Array.isArray(proofData.withdrawalProof)) {
-        throw new Error('Withdrawal proof is not an array');
-      }
-      if (proofData.withdrawalProof.length === 0) {
-        throw new Error('Withdrawal proof array is empty');
-      }
-
-      const withdrawalProofArray = proofData.withdrawalProof.map((p: string, index: number) => {
-        if (!p) {
-          throw new Error(`Withdrawal proof at index ${index} is undefined`);
-        }
-        return p as `0x${string}`;
-      });
-
-      console.log('\n📋 Withdrawal Proof Array:');
-      withdrawalProofArray.forEach((proof, index) => {
-        console.log(`   Proof ${index}: ${proof}`);
-      });
-
-      console.log('\n🔧 Submitting proof transaction...');
-      console.log(`   OptimismPortal: ${CONTRACT_ADDRESSES.OPTIMISM_PORTAL}`);
-      console.log(`   Game Index: ${disputeGame.gameIndex} (type: ${typeof disputeGame.gameIndex})`);
-
-      // Submit the proof transaction
-      writeProofContract({
-        address: CONTRACT_ADDRESSES.OPTIMISM_PORTAL as `0x${string}`,
-        abi: optimismPortalAbi,
-        functionName: 'proveWithdrawalTransaction',
-        args: [
-          withdrawalTuple,
-          BigInt(disputeGame.gameIndex),
-          outputRootProofTuple,
-          withdrawalProofArray
-        ],
-      });
-    } catch (error) {
-      console.error('❌ Failed to submit proof:', error);
-    }
-  }, [proofSubmissionData, writeProofContract, chainId, switchChain, optimismPortalAbi]);
-
   // Use imported finalizeWithdrawal function
-  const finalizeWithdrawal = useCallback(async (withdrawalDetails: MessagePassedEventData) => {
+  const finalizeWithdrawal = useCallback(async (withdrawalDetails: MessagePassedEventData, txId?: string) => {
     if (!address) return false;
     return await finalizeWithdrawalImported({
       withdrawalDetails,
@@ -345,11 +184,14 @@ export function BridgeInterface() {
       writeProofContract: writeFinalizeContract,
       setIsWithdrawalComplete,
       isWithdrawalComplete,
+      updateTransactionStatus: txId ? (status: string) => {
+        TransactionStorage.update({ id: txId, status: status as any });
+      } : undefined,
     });
   }, [address, writeFinalizeContract, setIsWithdrawalComplete, isWithdrawalComplete]);
 
   // Use imported resolveGame function
-  const resolveGame = useCallback(async (gameAddress: string) => {
+  const resolveGame = useCallback(async (gameAddress: string, txId?: string) => {
     return await resolveGameImported({
       gameAddress,
       writeResolveClaimsContract,
@@ -357,6 +199,9 @@ export function BridgeInterface() {
       isResolvingGame,
       isWithdrawalComplete,
       setIsResolvingGame,
+      updateTransactionStatus: txId ? (status: string) => {
+        TransactionStorage.update({ id: txId, status: status as any });
+      } : undefined,
     });
   }, [writeResolveClaimsContract, writeResolveGameContract, isResolvingGame, isWithdrawalComplete, setIsResolvingGame]);
 
@@ -365,17 +210,18 @@ export function BridgeInterface() {
     if (resolveClaimsTxHash) {
       console.log(`\n✅ Resolve Claims Transaction Submitted: ${resolveClaimsTxHash}`);
       
-      // Update transaction storage
-      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+      // Update status to resolving_game when transaction hash is available (user confirmed in wallet)
+      if (proofSubmissionData) {
         const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-        const tx = TransactionStorage.getAll().find(t => 
-          t.withdrawalDetails?.withdrawalHash === txId
-        );
-        if (tx) {
+        const tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
+        
+        if (tx && tx.status === 'waiting_resolve_signature') {
           TransactionStorage.update({ 
             id: tx.id, 
-            l1ResolveClaimsTxHash: resolveClaimsTxHash as string,
+            status: 'resolving_game',
+            l1ResolveClaimsTxHash: resolveClaimsTxHash 
           });
+          console.log('   Status updated: waiting_resolve_signature → resolving_game');
         }
       }
     }
@@ -391,42 +237,51 @@ export function BridgeInterface() {
         t.withdrawalDetails?.withdrawalHash === txId
       );
       
-      if (tx) {
-        // Check if we're already processing game resolution
-        if (processingTxs.current.has(`resolve_game_${txId}`)) {
-          console.log(`🔄 Already resolving game for ${txId}, skipping duplicate`);
-          return;
-        }
-        
-        // Mark as processing
-        processingTxs.current.add(`resolve_game_${txId}`);
-        
-        TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
-        
-        // Now send the resolve game transaction
-        console.log('\n🎯 Sending resolve game transaction...');
-        
-        // Get the dispute game address from proof submission data
-        const gameAddress = proofSubmissionData.disputeGame.gameAddress;
-        
-        // Send the resolve game transaction
-        writeResolveGameContract({
-          address: gameAddress as `0x${string}`,
-          abi: [{
-            type: 'function',
-            name: 'resolve',
-            inputs: [],
-            outputs: [],
-            stateMutability: 'nonpayable'
-          }],
-          functionName: 'resolve',
-        });
-        
-        console.log('✅ Resolve game transaction sent - waiting for confirmation...');
-        
-        // Clean up processing flag (will be set again if needed)
-        processingTxs.current.delete(`resolve_game_${txId}`);
+      // GUARD: Don't process if transaction is completed or in error state
+      if (!tx) {
+        console.log(`⚠️ Transaction not found for ${txId}, skipping resolve game`);
+        return;
       }
+      
+      if (tx.status === 'completed' || tx.status === 'error') {
+        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping resolve game`);
+        return;
+      }
+      
+      // Check if we're already processing game resolution
+      if (processingTxs.current.has(`resolve_game_${txId}`)) {
+        console.log(`🔄 Already resolving game for ${txId}, skipping duplicate`);
+        return;
+      }
+      
+      // Mark as processing
+      processingTxs.current.add(`resolve_game_${txId}`);
+      
+      TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
+      
+      // Now send the resolve game transaction
+      console.log('\n🎯 Sending resolve game transaction...');
+      
+      // Get the dispute game address from proof submission data
+      const gameAddress = proofSubmissionData.disputeGame.gameAddress;
+      
+      // Send the resolve game transaction
+      writeResolveGameContract({
+        address: gameAddress as `0x${string}`,
+        abi: [{
+          type: 'function',
+          name: 'resolve',
+          inputs: [],
+          outputs: [],
+          stateMutability: 'nonpayable'
+        }],
+        functionName: 'resolve',
+      });
+      
+      console.log('✅ Resolve game transaction sent - waiting for confirmation...');
+      
+      // Clean up processing flag (will be set again if needed)
+      processingTxs.current.delete(`resolve_game_${txId}`);
     }
     if (resolveClaimsError) {
       console.error('❌ Resolve Claims Transaction Failed:', resolveClaimsError);
@@ -484,8 +339,14 @@ export function BridgeInterface() {
         return;
       }
       
-      // Check if already finalized
-      if (tx.status === 'finalizing' || tx.status === 'completed') {
+      // GUARD: Don't process if transaction is completed or in error state
+      if (tx.status === 'completed' || tx.status === 'error') {
+        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping finalization`);
+        return;
+      }
+      
+      // Check if already finalizing
+      if (tx.status === 'finalizing' || tx.status === 'waiting_finalize_signature') {
         console.log(`ℹ️ Transaction ${tx.id} already at status ${tx.status}, skipping finalization`);
         return;
       }
@@ -496,16 +357,15 @@ export function BridgeInterface() {
       // Update status to game_resolved
       TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
       
-      console.log('\n🎯 Starting Step 6: Finalizing withdrawal...');
-      TransactionStorage.update({ id: tx.id, status: 'finalizing' });
+      console.log('\n🎯 Starting Step 6: Preparing finalize transaction...');
+      console.log('   Waiting for challenge period and checking balances...');
       
-      finalizeWithdrawal(proofSubmissionData.withdrawalDetails)
+      finalizeWithdrawal(proofSubmissionData.withdrawalDetails, tx.id)
         .then(() => {
-          console.log('\n✅ Finalization transaction sent!');
-          // Don't mark as completed here - wait for transaction confirmation
+          console.log('\n✅ Step 6: Finalize transaction preparation complete');
         })
         .catch((error) => {
-          console.error('❌ Step 6 FAILED:', error);
+          console.error('❌ Step 6 FAILED - User rejected or error occurred:', error);
           TransactionStorage.markError(tx.id, `Step 6 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         })
         .finally(() => {
@@ -532,17 +392,18 @@ export function BridgeInterface() {
     if (finalizeTxHash) {
       console.log(`\n✅ Finalize Withdrawal Transaction Submitted: ${finalizeTxHash}`);
       
-      // Update transaction storage
-      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+      // Update status to finalizing when transaction hash is available (user confirmed in wallet)
+      if (proofSubmissionData) {
         const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-        const tx = TransactionStorage.getAll().find(t => 
-          t.withdrawalDetails?.withdrawalHash === txId
-        );
-        if (tx) {
+        const tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
+        
+        if (tx && tx.status === 'waiting_finalize_signature') {
           TransactionStorage.update({ 
             id: tx.id, 
-            l1FinalizeTxHash: finalizeTxHash as string,
+            status: 'finalizing',
+            l1FinalizeTxHash: finalizeTxHash 
           });
+          console.log('   Status updated: waiting_finalize_signature → finalizing');
         }
       }
     }
@@ -550,27 +411,44 @@ export function BridgeInterface() {
       console.log('\n⏳ Waiting for finalize withdrawal confirmation...');
     }
     if (isFinalizeConfirmed && proofSubmissionData) {
-      console.log('\n✅ Finalize Withdrawal Transaction Confirmed!');
-      console.log('🎉 Withdrawal process completed successfully!');
-      
       const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
       const tx = TransactionStorage.getAll().find(t => 
         t.withdrawalDetails?.withdrawalHash === txId
       );
       
-      if (tx) {
-        // Mark transaction as completed
-        TransactionStorage.update({ 
-          id: tx.id, 
-          status: 'completed',
-          completedAt: Date.now(),
-        });
-        
-        // Mark withdrawal process as complete
-        setIsWithdrawalComplete(true);
-        
-        console.log(`✅ Transaction ${tx.id} marked as completed`);
+      // GUARD: Only mark as completed if currently finalizing
+      if (!tx) {
+        console.log(`⚠️ Transaction not found for ${txId}`);
+        return;
       }
+      
+      if (tx.status === 'completed') {
+        console.log(`🛑 Transaction ${tx.id} is already completed, skipping`);
+        return;
+      }
+      
+      if (tx.status === 'error') {
+        console.log(`🛑 Transaction ${tx.id} is in error state, skipping completion`);
+        return;
+      }
+      
+      console.log('\n✅ Finalize Withdrawal Transaction Confirmed!');
+      console.log('🎉 Withdrawal process completed successfully!');
+      
+      // Mark transaction as completed
+      TransactionStorage.update({ 
+        id: tx.id, 
+        status: 'completed',
+        completedAt: Date.now(),
+      });
+      
+      // Mark withdrawal process as complete
+      setIsWithdrawalComplete(true);
+      
+      // Clear proof submission data to prevent re-processing
+      setProofSubmissionData(null);
+      
+      console.log(`✅ Transaction ${tx.id} marked as completed`);
     }
     if (finalizeError) {
       console.error('❌ Finalize Withdrawal Transaction Failed:', finalizeError);
@@ -591,6 +469,21 @@ export function BridgeInterface() {
   useEffect(() => {
     if (proofTxHash) {
       console.log(`\n✅ Proof Transaction Submitted: ${proofTxHash}`);
+      
+      // Update status to proof_submitted when transaction hash is available (user confirmed in wallet)
+      if (proofSubmissionData) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
+        
+        if (tx && tx.status === 'waiting_proof_signature') {
+          TransactionStorage.update({ 
+            id: tx.id, 
+            status: 'proof_submitted',
+            l1ProofTxHash: proofTxHash 
+          });
+          console.log('   Status updated: waiting_proof_signature → proof_submitted');
+        }
+      }
     }
     if (isProofConfirming) {
       console.log('\n⏳ Waiting for proof confirmation...');
@@ -610,8 +503,19 @@ export function BridgeInterface() {
         t.withdrawalDetails?.withdrawalHash === txId
       );
       
+      // GUARD: Don't process if transaction is completed or in error state
+      if (!tx) {
+        console.log(`⚠️ Transaction not found for ${txId}, skipping Step 5`);
+        return;
+      }
+      
+      if (tx.status === 'completed' || tx.status === 'error') {
+        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping Step 5`);
+        return;
+      }
+      
       // Check if already past proof_confirmed status
-      if (tx && tx.status !== 'proof_submitted' && tx.status !== 'proof_confirmed') {
+      if (tx.status !== 'proof_submitted' && tx.status !== 'proof_confirmed') {
         console.log(`ℹ️ Transaction ${tx.id} already past proof confirmation (status: ${tx.status}), skipping Step 5`);
         return;
       }
@@ -629,16 +533,15 @@ export function BridgeInterface() {
           l1ProofTxHash: proofTxHash as string,
         });
         
-        TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
+        console.log('\n🎯 Starting Step 5: Preparing resolve transaction...');
+        console.log('   Checking game status and waiting for challenge period...');
         
-        console.log('\n🎯 Starting Step 5: Resolving dispute game...');
-        resolveGame(proofSubmissionData.disputeGame.gameAddress)
+        resolveGame(proofSubmissionData.disputeGame.gameAddress, tx.id)
           .then(() => {
-            console.log('\n✅ Step 5 Complete: Dispute game resolved!');
-            TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+            console.log('\n✅ Step 5: Resolve transaction preparation complete');
           })
           .catch((error) => {
-            console.error('❌ Step 5 FAILED - Cannot proceed to Step 6:', error);
+            console.error('❌ Step 5 FAILED - User rejected or error occurred:', error);
             TransactionStorage.markError(tx.id, `Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           })
           .finally(() => {
@@ -795,8 +698,8 @@ export function BridgeInterface() {
           }
               
           // Step 4: Submit Proof to L1 (only if Step 3 succeeded)
-          TransactionStorage.update({ id: txHash, status: 'submitting_proof' });
-          console.log('\n📤 Starting Step 4: Submitting proof to L1...');
+          TransactionStorage.update({ id: txHash, status: 'waiting_proof_signature' });
+          console.log('\n📤 Starting Step 4: Prompting user to sign proof transaction...');
           
           try {
             // Save proof submission data BEFORE submitting - needed for Step 5 when proof is confirmed
@@ -806,13 +709,13 @@ export function BridgeInterface() {
               proofData,
             });
             
-            const proofTxHash = await submitProof(withdrawalDetails, disputeGame, proofData);
-            TransactionStorage.update({ id: txHash, status: 'proof_submitted' });
-            console.log('\n✅ Step 4 Complete: Proof submitted successfully!');
-            console.log(`   Proof Transaction: ${proofTxHash}`);
-            console.log('\n   Steps 5 & 6 (Resolve game and Finalize) will continue automatically...');
+            // This will prompt the user's wallet - the actual submission happens when they confirm
+            await submitProof(withdrawalDetails, disputeGame, proofData);
+            console.log('\n✅ Step 4: Proof transaction prompt sent to wallet');
+            console.log('   Waiting for user to confirm transaction in wallet...');
+            console.log('   Status will update automatically when transaction is submitted');
           } catch (error) {
-            console.error('❌ Step 4 FAILED - Cannot proceed to Step 5:', error);
+            console.error('❌ Step 4 FAILED - User rejected or error occurred:', error);
             throw new Error(`Step 4 (Submit proof) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }
@@ -954,7 +857,7 @@ export function BridgeInterface() {
 
   // Handle L2 transaction hash when it becomes available
   useEffect(() => {
-    if (l2TxData && !l2TxHash && address) {
+    if (l2TxData && address) {
       // Check if transaction already exists to prevent duplicates
       const existingTx = TransactionStorage.getById(l2TxData);
       
@@ -964,6 +867,7 @@ export function BridgeInterface() {
           id: l2TxData,
           l2TxHash: l2TxData,
           status: 'pending',
+          type: 'L2_TO_L1',
           token: fromToken.symbol,
           amount: fromAmount,
           fromAddress: address,
@@ -976,7 +880,7 @@ export function BridgeInterface() {
       
       setL2TxHash(l2TxData);
     }
-  }, [l2TxData, l2TxHash, address, fromToken.symbol, fromAmount]);
+  }, [l2TxData, address, fromToken.symbol, fromAmount]);
 
   // Handle L2 transaction receipt
   useEffect(() => {
@@ -995,7 +899,6 @@ export function BridgeInterface() {
       const tx = TransactionStorage.getById(l2TxHash);
       if (tx && tx.status !== 'pending') {
         console.log(`ℹ️ Transaction ${l2TxHash} already processed (status: ${tx.status}), skipping`);
-        setL2TxHash(null);
         return;
       }
       
@@ -1007,9 +910,6 @@ export function BridgeInterface() {
         // Remove from processing set when done (either success or error)
         processingTxs.current.delete(l2TxHash);
       });
-      
-      // Reset the state
-      setL2TxHash(null);
     }
   }, [l2TxReceipt, l2TxHash, logReceiptDetails]);
 
@@ -1352,31 +1252,6 @@ export function BridgeInterface() {
         </Button>
         )}
         </div>
-
-        {/* Submit Proof Button */}
-        {proofSubmissionData && (
-          <div className="relative z-10 mt-4">
-            <Button
-              onClick={handleSubmitProof}
-              disabled={isProofPending || isProofConfirming}
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
-            >
-              {isProofPending ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Submitting Proof...
-                </div>
-              ) : isProofConfirming ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Confirming...
-                </div>
-              ) : (
-                "Submit Proof to L1"
-              )}
-            </Button>
-          </div>
-        )}
 
         {/* Error Display */}
         {hasError && (

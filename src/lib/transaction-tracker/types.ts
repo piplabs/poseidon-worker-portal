@@ -1,20 +1,22 @@
 // Types for tracking L2 to L1 withdrawal transactions
 
 export type TransactionStatus = 
-  | 'pending'           // Initial L2 transaction submitted
-  | 'l2_confirmed'      // L2 transaction confirmed
-  | 'waiting_game'      // Waiting for dispute game
-  | 'game_found'        // Dispute game found
-  | 'generating_proof'  // Generating merkle proof
-  | 'proof_generated'   // Proof generated
-  | 'submitting_proof'  // Submitting proof to L1
-  | 'proof_submitted'   // Proof transaction sent
-  | 'proof_confirmed'   // Proof transaction confirmed
-  | 'resolving_game'    // Resolving dispute game
-  | 'game_resolved'     // Game resolved
-  | 'finalizing'        // Finalizing withdrawal
-  | 'completed'         // Withdrawal complete
-  | 'error';            // Error occurred
+  | 'pending'                    // Initial L2 transaction submitted
+  | 'l2_confirmed'               // L2 transaction confirmed
+  | 'waiting_game'               // Waiting for dispute game
+  | 'game_found'                 // Dispute game found
+  | 'generating_proof'           // Generating merkle proof
+  | 'proof_generated'            // Proof generated
+  | 'waiting_proof_signature'    // Waiting for user to sign proof transaction
+  | 'proof_submitted'            // Proof transaction sent to network
+  | 'proof_confirmed'            // Proof transaction confirmed on-chain
+  | 'waiting_resolve_signature'  // Waiting for user to sign resolve transaction
+  | 'resolving_game'             // Resolve transaction sent to network
+  | 'game_resolved'              // Game resolved and confirmed on-chain
+  | 'waiting_finalize_signature' // Waiting for user to sign finalize transaction
+  | 'finalizing'                 // Finalize transaction sent to network
+  | 'completed'                  // Withdrawal complete
+  | 'error';                     // Error occurred
 
 export interface WithdrawalTransaction {
   // Identification
@@ -30,6 +32,7 @@ export interface WithdrawalTransaction {
   errorMessage?: string;
   
   // Transaction details
+  type: 'L2_TO_L1';            // Withdrawal type
   token: string;                // Token symbol (ETH or PSDN)
   amount: string;               // Amount being bridged
   fromAddress: string;          // User's address

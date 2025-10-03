@@ -146,6 +146,22 @@ export class TransactionStorage {
   }
 
   /**
+   * Clear only active (pending) transactions, keep completed ones
+   */
+  static clearActive(): number {
+    const transactions = this.getAll();
+    const completed = transactions.filter(tx => tx.status === 'completed');
+    const removedCount = transactions.length - completed.length;
+    
+    if (removedCount > 0) {
+      this.saveAll(completed);
+      this.dispatchUpdateEvent();
+    }
+    
+    return removedCount;
+  }
+
+  /**
    * Clear completed transactions older than X days
    */
   static clearOld(daysOld: number = 7): number {
