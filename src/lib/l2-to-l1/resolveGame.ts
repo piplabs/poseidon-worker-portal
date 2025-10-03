@@ -1,6 +1,5 @@
 import { createPublicClient, http } from "viem";
 import { RPC_URLS } from "@/lib/constants";
-import { MessagePassedEventData } from "./types";
 
 // DisputeGame ABI for resolution
 const disputeGameAbi = [
@@ -27,10 +26,25 @@ const disputeGameAbi = [
   },
   {
     type: 'function',
+    name: 'claimData',
+    inputs: [{ name: 'index', type: 'uint256' }],
+    outputs: [
+      { name: 'parentIndex', type: 'uint32' },
+      { name: 'counteredBy', type: 'address' },
+      { name: 'claimant', type: 'address' },
+      { name: 'bond', type: 'uint128' },
+      { name: 'claim', type: 'bytes32' },
+      { name: 'position', type: 'uint128' },
+      { name: 'clock', type: 'uint128' }
+    ],
+    stateMutability: 'view'
+  },
+  {
+    type: 'function',
     name: 'resolveClaim',
     inputs: [
       { name: 'claimIndex', type: 'uint256' },
-      { name: 'claimData', type: 'uint256' }
+      { name: 'numToResolve', type: 'uint256' }
     ],
     outputs: [],
     stateMutability: 'nonpayable'
@@ -46,14 +60,18 @@ const disputeGameAbi = [
 
 export interface ResolveGameParams {
   gameAddress: string;
-  writeProofContract: (params: {
+  writeResolveClaimsContract: (params: {
     address: `0x${string}`;
     abi: readonly unknown[];
     functionName: string;
     args?: readonly unknown[];
   }) => void;
-  finalizeWithdrawal: (withdrawalDetails: MessagePassedEventData) => Promise<boolean>;
-  withdrawalDetails: MessagePassedEventData | null;
+  writeResolveGameContract: (params: {
+    address: `0x${string}`;
+    abi: readonly unknown[];
+    functionName: string;
+    args?: readonly unknown[];
+  }) => void;
   isResolvingGame: boolean;
   isWithdrawalComplete: boolean;
   setIsResolvingGame: (value: boolean) => void;
@@ -61,9 +79,8 @@ export interface ResolveGameParams {
 
 export async function resolveGame({
   gameAddress,
-  writeProofContract,
-  finalizeWithdrawal,
-  withdrawalDetails,
+  writeResolveClaimsContract,
+  writeResolveGameContract,
   isResolvingGame,
   isWithdrawalComplete,
   setIsResolvingGame,
@@ -138,68 +155,45 @@ export async function resolveGame({
 
     console.log(`   Claims to resolve: ${claimDataLen}`);
 
-    // Resolve claims (from newest to oldest) - skip for now as they auto-resolve
-    // Most dispute games auto-resolve claims, so we'll skip this step
-    console.log('\n📊 Skipping claim resolution (auto-resolves)...');
-
-    // Resolve the game
-    let gameResolved = false;
-    try {
+    // Resolve all claims in one transaction using the root claim
+    if (Number(claimDataLen) > 0) {
+      console.log('\n🔧 Resolving all claims...');
+      
+      // The resolveClaim function with numToResolve parameter can resolve multiple claims recursively
+      // Starting from the root claim (index 0) and specifying numToResolve will resolve all claims
+      // in the correct order (children before parents)
+      
+      console.log(`   Resolving all ${claimDataLen} claims starting from root (index 0)...`);
+      console.log(`   This will recursively resolve all child claims in the correct order`);
+      
+      // Resolve starting from the root claim (index 0) with numToResolve set to total number of claims
+      // This will resolve all claims in the game in the correct dependency order
+      writeResolveClaimsContract({
+        address: gameAddress as `0x${string}`,
+        abi: disputeGameAbi,
+        functionName: 'resolveClaim',
+        args: [BigInt(0), BigInt(claimDataLen)],
+      });
+      
+      console.log('   ✅ Resolve all claims transaction sent');
+      console.log('   The confirmation will be handled by the useWaitForTransactionReceipt hook');
+      console.log('   The resolve game transaction will be sent automatically after claims are confirmed');
+    } else {
+      console.log('\n📊 No claims to resolve - proceeding directly to resolve game');
+      
+      // If there are no claims, we can directly resolve the game
       console.log('\n🎯 Resolving the game...');
       
-      // Use writeContract to send the transaction
-      writeProofContract({
+      writeResolveGameContract({
         address: gameAddress as `0x${string}`,
         abi: disputeGameAbi,
         functionName: 'resolve',
       });
 
-      console.log('✅ Game resolution transaction sent');
-      
-      // Wait for game resolution to confirm - using a longer wait time
-      console.log('\n⏳ Waiting for game resolution to confirm (this may take up to 30 seconds)...');
-      
-      // Wait longer for confirmation (30 seconds)
-      await new Promise(resolve => setTimeout(resolve, 30000));
-      
-      // Verify the game was resolved
-      const finalStatus = await l1Client.readContract({
-        address: gameAddress as `0x${string}`,
-        abi: disputeGameAbi,
-        functionName: 'status',
-      });
-      
-      if (Number(finalStatus) === 2) {
-        console.log('✅ Game resolution confirmed - status is DEFENDER_WINS');
-        gameResolved = true;
-      } else {
-        console.log(`⚠️ Game status is ${finalStatus}, expected 2 (DEFENDER_WINS) - may need manual resolution`);
-        // Still mark as resolved if status changed from IN_PROGRESS
-        gameResolved = Number(finalStatus) !== 0;
-      }
-    } catch (e) {
-      console.error('❌ Game resolution failed:', e);
-      throw new Error(`Failed to resolve dispute game: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      console.log('✅ Game resolution transaction sent - waiting for confirmation via wagmi hook...');
+      console.log('   Step 6 (finalization) will trigger automatically after confirmation');
     }
-
-    // Step 6: Finalize withdrawal ONLY if game was successfully resolved
-    if (!gameResolved) {
-      throw new Error('Cannot proceed to finalization: Dispute game was not resolved');
-    }
-
-    if (!withdrawalDetails) {
-      throw new Error('Cannot finalize: No withdrawal details available');
-    }
-
-    console.log('\n🎯 Starting Step 6: Finalizing withdrawal...');
-    try {
-      await finalizeWithdrawal(withdrawalDetails);
-      console.log('\n✅ Step 6 Complete: Withdrawal finalized!');
-    } catch (error) {
-      console.error('❌ Step 6 FAILED:', error);
-      throw new Error(`Finalization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-
+    
     return true;
   } catch (error) {
     console.error('❌ Failed to resolve game:', error);

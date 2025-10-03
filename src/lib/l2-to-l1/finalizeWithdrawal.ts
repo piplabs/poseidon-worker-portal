@@ -118,44 +118,13 @@ export async function finalizeWithdrawal({
     });
 
     console.log('✅ Finalization transaction sent!');
-
-    // Wait for confirmation (30 seconds)
-    console.log('\n⏳ Waiting 30 seconds for finalization confirmation...');
-    await new Promise(resolve => setTimeout(resolve, 30000));
-
-    // Check L1 token balance after
-    console.log('\n📊 Checking L1 token balance after finalization...');
-    const balanceAfter = await l1Client.readContract({
-      address: l1TokenAddress as `0x${string}`,
-      abi: erc20Abi,
-      functionName: 'balanceOf',
-      args: [address as `0x${string}`],
-    });
-
-    // Check L1StandardBridge balance
-    const bridgeBalance = await l1Client.readContract({
-      address: l1TokenAddress as `0x${string}`,
-      abi: erc20Abi,
-      functionName: 'balanceOf',
-      args: [l1StandardBridgeAddress as `0x${string}`],
-    });
-
-    console.log('\n📊 Token Balance Summary:');
-    console.log(`   Your L1 Balance Before: ${balanceBefore.toString()} wei`);
-    console.log(`   Your L1 Balance After: ${balanceAfter.toString()} wei`);
-    console.log(`   L1StandardBridge Balance: ${bridgeBalance.toString()} wei`);
-
-    const balanceChange = balanceAfter - balanceBefore;
-    if (balanceChange > BigInt(0)) {
-      console.log(`\n🎉 Withdrawal successful! Received ${balanceChange.toString()} wei`);
-    } else {
-      console.log('\n⚠️ No balance change detected');
-    }
-
-    // Mark withdrawal process as complete
-    setIsWithdrawalComplete(true);
-    console.log('\n✅ Withdrawal process completed successfully!');
-
+    console.log('   The confirmation will be handled by the useWaitForTransactionReceipt hook');
+    console.log('   Balance checks and completion will happen after confirmation');
+    
+    // Note: We don't wait or check balances here - that will be handled by the useEffect
+    // monitoring the finalize transaction confirmation in bridge-interface.tsx
+    // This allows the wagmi hook to properly track the transaction status
+    
     return true;
   } catch (error) {
     console.error('❌ Failed to finalize withdrawal:', error);
