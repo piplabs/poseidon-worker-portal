@@ -75,6 +75,7 @@ export interface ResolveGameParams {
   isResolvingGame: boolean;
   isWithdrawalComplete: boolean;
   setIsResolvingGame: (value: boolean) => void;
+  updateTransactionStatus?: (status: string) => void; // Optional callback to update status
 }
 
 export async function resolveGame({
@@ -84,6 +85,7 @@ export async function resolveGame({
   isResolvingGame,
   isWithdrawalComplete,
   setIsResolvingGame,
+  updateTransactionStatus,
 }: ResolveGameParams): Promise<boolean> {
   // Prevent multiple simultaneous executions
   if (isResolvingGame) {
@@ -166,6 +168,12 @@ export async function resolveGame({
       console.log(`   Resolving all ${claimDataLen} claims starting from root (index 0)...`);
       console.log(`   This will recursively resolve all child claims in the correct order`);
       
+      // Update status to waiting_resolve_signature right before prompting wallet
+      if (updateTransactionStatus) {
+        updateTransactionStatus('waiting_resolve_signature');
+        console.log('   📝 Status updated: waiting_resolve_signature');
+      }
+      
       // Resolve starting from the root claim (index 0) with numToResolve set to total number of claims
       // This will resolve all claims in the game in the correct dependency order
       writeResolveClaimsContract({
@@ -175,7 +183,7 @@ export async function resolveGame({
         args: [BigInt(0), BigInt(claimDataLen)],
       });
       
-      console.log('   ✅ Resolve all claims transaction sent');
+      console.log('   ✅ Resolve all claims transaction sent to wallet');
       console.log('   The confirmation will be handled by the useWaitForTransactionReceipt hook');
       console.log('   The resolve game transaction will be sent automatically after claims are confirmed');
     } else {
@@ -184,13 +192,19 @@ export async function resolveGame({
       // If there are no claims, we can directly resolve the game
       console.log('\n🎯 Resolving the game...');
       
+      // Update status to waiting_resolve_signature right before prompting wallet
+      if (updateTransactionStatus) {
+        updateTransactionStatus('waiting_resolve_signature');
+        console.log('   📝 Status updated: waiting_resolve_signature');
+      }
+      
       writeResolveGameContract({
         address: gameAddress as `0x${string}`,
         abi: disputeGameAbi,
         functionName: 'resolve',
       });
 
-      console.log('✅ Game resolution transaction sent - waiting for confirmation via wagmi hook...');
+      console.log('✅ Game resolution transaction sent to wallet - waiting for confirmation via wagmi hook...');
       console.log('   Step 6 (finalization) will trigger automatically after confirmation');
     }
     

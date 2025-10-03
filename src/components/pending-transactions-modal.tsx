@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ExternalLink, CheckCircle2, Loader2, XCircle, Clock } from "lucide-react";
+import { X, ExternalLink, CheckCircle2, Loader2, XCircle, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useWithdrawalTransactions, type TransactionStatus } from "@/lib/transaction-tracker";
+import { useWithdrawalTransactions, type TransactionStatus, TransactionStorage } from "@/lib/transaction-tracker";
 import { CHAIN_IDS } from "@/lib/constants";
 
 interface PendingTransactionsModalProps {
@@ -21,11 +21,13 @@ function getStatusLabel(status: TransactionStatus): string {
     game_found: 'Dispute Game Found',
     generating_proof: 'Generating Proof',
     proof_generated: 'Proof Generated',
-    submitting_proof: 'Submitting Proof to L1',
-    proof_submitted: 'Proof Submitted',
-    proof_confirmed: 'Proof Confirmed',
+    waiting_proof_signature: 'Waiting for Proof Signature',
+    proof_submitted: 'Proof Submitted to L1',
+    proof_confirmed: 'Proof Confirmed on L1',
+    waiting_resolve_signature: 'Waiting for Resolve Signature',
     resolving_game: 'Resolving Dispute Game',
-    game_resolved: 'Game Resolved',
+    game_resolved: 'Game Resolved on L1',
+    waiting_finalize_signature: 'Waiting for Finalize Signature',
     finalizing: 'Finalizing Withdrawal',
     completed: 'Completed',
     error: 'Error',
@@ -41,7 +43,7 @@ function getStatusIcon(status: TransactionStatus) {
   if (status === 'error') {
     return <XCircle className="h-4 w-4 text-red-500" />;
   }
-  return <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />;
+  return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
 }
 
 // Helper function to get progress percentage
@@ -53,11 +55,13 @@ function getProgress(status: TransactionStatus): number {
     game_found: 30,
     generating_proof: 40,
     proof_generated: 50,
-    submitting_proof: 60,
-    proof_submitted: 65,
-    proof_confirmed: 70,
-    resolving_game: 80,
-    game_resolved: 90,
+    waiting_proof_signature: 55,
+    proof_submitted: 60,
+    proof_confirmed: 65,
+    waiting_resolve_signature: 70,
+    resolving_game: 75,
+    game_resolved: 85,
+    waiting_finalize_signature: 90,
     finalizing: 95,
     completed: 100,
     error: 0,
@@ -67,12 +71,10 @@ function getProgress(status: TransactionStatus): number {
 
 export function PendingTransactionsModal({ isOpen, onClose }: PendingTransactionsModalProps) {
   const { transactions, activeTransactions, completedTransactions, erroredTransactions } = useWithdrawalTransactions();
-  const [selectedTab, setSelectedTab] = useState<'active' | 'completed' | 'error'>('active');
+  const [selectedTab, setSelectedTab] = useState<'active' | 'completed'>('active');
 
   const displayTransactions = 
-    selectedTab === 'active' ? activeTransactions :
-    selectedTab === 'completed' ? completedTransactions :
-    erroredTransactions;
+    selectedTab === 'active' ? activeTransactions : completedTransactions;
 
   const getBlockExplorerUrl = (txHash: string, chainId: number) => {
     // TODO: Update with actual block explorer URLs
@@ -80,6 +82,11 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
       return `https://poseidon.storyscan.io/tx/${txHash}`;
     }
     return `https://devnet-subnet0.psdnscan.io/tx/${txHash}`;
+  };
+
+  const handleClearActive = () => {
+    // Clear only active (pending) transactions, keep completed ones
+    TransactionStorage.clearActive();
   };
 
   return (
@@ -104,15 +111,28 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Withdrawal Transactions</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-                className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <h2 className="text-lg font-semibold">Bridge Transactions</h2>
+              <div className="flex items-center gap-2">
+                {activeTransactions.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearActive}
+                    className="bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-red-500 hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear Pending
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClose}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -136,16 +156,6 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                 }`}
               >
                 Completed ({completedTransactions.length})
-              </button>
-              <button
-                onClick={() => setSelectedTab('error')}
-                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                  selectedTab === 'error'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Errors ({erroredTransactions.length})
               </button>
             </div>
 
@@ -172,6 +182,9 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                           <span className="font-medium text-sm">
                             {tx.amount} {tx.token}
                           </span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            L2 → L1
+                          </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {getStatusLabel(tx.status)}
@@ -184,18 +197,20 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
 
                     {/* Progress Bar */}
                     {tx.status !== 'error' && tx.status !== 'completed' && (
-                      <div className="space-y-1">
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${getProgress(tx.status)}%` }}
-                            transition={{ duration: 0.5 }}
-                            className="h-full bg-yellow-500"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground text-right">
-                          {getProgress(tx.status)}% Complete
-                        </p>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${getProgress(tx.status)}%` }}
+                          transition={{ duration: 0.5 }}
+                          className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Completed Progress Bar */}
+                    {tx.status === 'completed' && (
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full w-full bg-gradient-to-r from-blue-500 to-purple-500" />
                       </div>
                     )}
 
