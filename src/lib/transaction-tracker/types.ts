@@ -1,4 +1,4 @@
-// Types for tracking L2 to L1 withdrawal transactions
+// Types for tracking bridge transactions (L1 to L2 and L2 to L1)
 
 export type TransactionStatus = 
   | 'pending'                    // Initial L2 transaction submitted
@@ -20,8 +20,9 @@ export type TransactionStatus =
 
 export interface WithdrawalTransaction {
   // Identification
-  id: string;                       // Unique transaction ID (L2 tx hash)
-  l2TxHash: string;                // L2 transaction hash
+  id: string;                       // Unique transaction ID (tx hash)
+  l1TxHash?: string;               // L1 transaction hash (for L1 to L2)
+  l2TxHash?: string;               // L2 transaction hash (for L2 to L1)
   l1ProofTxHash?: string;          // L1 proof transaction hash
   l1ResolveClaimsTxHash?: string;  // L1 resolve claims transaction hash
   l1ResolveGameTxHash?: string;    // L1 resolve game transaction hash
@@ -32,10 +33,10 @@ export interface WithdrawalTransaction {
   errorMessage?: string;
   
   // Transaction details
-  type: 'L2_TO_L1';            // Withdrawal type
-  token: string;                // Token symbol (ETH or PSDN)
-  amount: string;               // Amount being bridged
-  fromAddress: string;          // User's address
+  type: 'L1_TO_L2' | 'L2_TO_L1';  // Bridge direction
+  token: string;                   // Token symbol (ETH or PSDN)
+  amount: string;                  // Amount being bridged
+  fromAddress: string;             // User's address
   
   // Withdrawal data (needed for proof and finalization)
   withdrawalDetails?: {
@@ -82,6 +83,8 @@ export interface TransactionUpdate {
   id: string;
   status?: TransactionStatus;
   errorMessage?: string;
+  l1TxHash?: string;
+  l2TxHash?: string;
   l1ProofTxHash?: string;
   l1ResolveClaimsTxHash?: string;
   l1ResolveGameTxHash?: string;

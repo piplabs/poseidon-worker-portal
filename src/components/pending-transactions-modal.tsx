@@ -183,7 +183,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                             {tx.amount} {tx.token}
                           </span>
                           <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                            L2 → L1
+                            {tx.type === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -223,14 +223,26 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
 
                     {/* Transaction Links */}
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <a
-                        href={getBlockExplorerUrl(tx.l2TxHash, CHAIN_IDS.L2)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-primary hover:underline"
-                      >
-                        L2 Tx <ExternalLink className="h-3 w-3" />
-                      </a>
+                      {tx.type === 'L1_TO_L2' && tx.l1TxHash && (
+                        <a
+                          href={getBlockExplorerUrl(tx.l1TxHash, CHAIN_IDS.L1)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                        >
+                          L1 Tx <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {tx.type === 'L2_TO_L1' && tx.l2TxHash && (
+                        <a
+                          href={getBlockExplorerUrl(tx.l2TxHash, CHAIN_IDS.L2)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                        >
+                          L2 Tx <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
                       {tx.l1ProofTxHash && (
                         <a
                           href={getBlockExplorerUrl(tx.l1ProofTxHash, CHAIN_IDS.L1)}
