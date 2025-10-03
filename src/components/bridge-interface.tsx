@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { TokenSelector } from "@/components/token-selector";
 import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
 import { ChevronDown, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useBalance, useSwitchChain, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseUnits, createPublicClient, http, decodeEventLog, parseAbi, keccak256, encodeAbiParameters } from "viem";
+import { parseUnits, createPublicClient, http, decodeEventLog } from "viem";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { 
@@ -48,7 +48,22 @@ import {
   isValidAmount,
   getTokenBalance,
 } from "@/lib/utils";
-import { usePendingTransactionsContext } from "@/contexts/PendingTransactionsContext";
+import {
+  type MessagePassedEventData,
+  type DisputeGameData,
+  type ProofData,
+  waitForDisputeGame as waitForDisputeGameImported,
+  generateProof as generateProofImported,
+  submitProof as submitProofImported,
+  resolveGame as resolveGameImported,
+  finalizeWithdrawal as finalizeWithdrawalImported,
+  optimismPortalAbi as importedOptimismPortalAbi,
+} from "@/lib/l2-to-l1";
+import {
+  TransactionStorage,
+  useWithdrawalTransactions,
+  type TransactionStatus,
+} from "@/lib/transaction-tracker";
 
 
 export function BridgeInterface() {
@@ -62,467 +77,32 @@ export function BridgeInterface() {
   const [showCalculation, setShowCalculation] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
   const [l2TxHash, setL2TxHash] = useState<string | null>(null);
-  const [pendingTxId, setPendingTxId] = useState<string | null>(null);
+  
+  // Track which transactions are currently being processed to prevent duplicates
+  const processingTxs = useRef<Set<string>>(new Set());
 
   const { address } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
-  const { addPendingTransaction, updateTransactionStatus, updateTransactionHash } = usePendingTransactionsContext();
   
-  // Interface for MessagePassed event data
-  interface MessagePassedEventData {
-    nonce: string;
-    sender: string;
-    target: string;
-    value: string;
-    gasLimit: string;
-    data: string;
-    withdrawalHash: string;
-  }
-
-  // Interface for DisputeGame data
-  interface DisputeGameData {
-    gameIndex: number;
-    gameAddress: string;
-    gameType: number;
-    gameL2Block: number;
-    rootClaim: string;
-    timestamp: number;
-  }
-
-  // DisputeGameFactory ABI
-  const disputeGameFactoryAbi = parseAbi([
-    'function gameCount() view returns (uint256)',
-    'function gameAtIndex(uint256) view returns (uint8,uint64,address)',
-  ]);
-
-  // DisputeGame ABI
-  const disputeGameAbi = parseAbi([
-    'function l2BlockNumber() view returns (uint256)',
-    'function rootClaim() view returns (bytes32)',
-  ]);
-
-  // Step 2: Poll DisputeGameFactory for suitable game
-  const waitForDisputeGame = useCallback(async (l2BlockNumber: number): Promise<DisputeGameData> => {
-    try {
-      console.log('\n' + '═'.repeat(80));
-      console.log('STEP 2: WAIT FOR DISPUTE GAME');
-      console.log('═'.repeat(80));
-
-      console.log('\n📊 Parameters:');
-      console.log(`   L2 Block to prove: ${l2BlockNumber}`);
-      console.log(`   DisputeGameFactory: ${CONTRACT_ADDRESSES.DISPUTE_GAME_FACTORY}`);
-      console.log(`\n⏳ Waiting for a dispute game with block >= ${l2BlockNumber}`);
-      console.log(`   (New games are created periodically by the proposer)`);
-
-      // Create L1 client
-      const l1Client = createPublicClient({
-        transport: http(RPC_URLS.L1),
-      });
-
-      console.log('\n🔧 L1 Client initialized:');
-      console.log(`   RPC URL: ${RPC_URLS.L1}`);
-      console.log(`   Client:`, l1Client);
-
-      const maxWaitTime = 600000; // 10 minutes
-      const checkInterval = 10000; // 10 seconds
-      const startTime = Date.now();
-      let lastGameCount = 0;
-      let highestBlockSeen = 0;
-
-      while ((Date.now() - startTime) < maxWaitTime) {
-        try {
-          // Get game count
-          const gameCount = await l1Client.readContract({
-            address: CONTRACT_ADDRESSES.DISPUTE_GAME_FACTORY as `0x${string}`,
-            abi: disputeGameFactoryAbi,
-            functionName: 'gameCount',
-          });
-
-          const gameCountNum = Number(gameCount);
-
-          // Only process games when count changes
-          if (gameCountNum !== lastGameCount) {
-            console.log(`\n🎮 Game count updated: ${gameCountNum} (was ${lastGameCount})`);
-            lastGameCount = gameCountNum;
-
-            // When waiting for new games, only check the most recent game
-            // since we know the next game will likely cover our withdrawal block
-            const startIndex = gameCountNum - 1; // Only check the newest game
-            const endIndex = gameCountNum - 1;
-            
-            console.log(`\n🔍 Checking newest game #${startIndex} (waiting for next game to be published)...`);
-            
-            for (let i = startIndex; i <= endIndex; i++) {
-              // Get game details
-              const gameData = await l1Client.readContract({
-                address: CONTRACT_ADDRESSES.DISPUTE_GAME_FACTORY as `0x${string}`,
-                abi: disputeGameFactoryAbi,
-                functionName: 'gameAtIndex',
-                args: [BigInt(i)],
-              });
-
-              const [gameType, timestamp, gameAddress] = gameData as [number, bigint, `0x${string}`];
-
-              // Get game L2 block
-              const gameL2Block = await l1Client.readContract({
-                address: gameAddress,
-                abi: disputeGameAbi,
-                functionName: 'l2BlockNumber',
-              });
-
-              // Get root claim
-              const rootClaim = await l1Client.readContract({
-                address: gameAddress,
-                abi: disputeGameAbi,
-                functionName: 'rootClaim',
-              });
-
-              const gameL2BlockNum = Number(gameL2Block);
-
-              console.log(`\n📋 Game #${i} Details:`);
-              console.log(`   Address: ${gameAddress}`);
-              console.log(`   Type: ${gameType}`);
-              console.log(`   L2 Block: ${gameL2BlockNum}`);
-              console.log(`   Root Claim: ${rootClaim}`);
-              console.log(`   Created: ${new Date(Number(timestamp) * 1000).toISOString()}`);
-
-              // Track the highest block we've seen
-              if (gameL2BlockNum > highestBlockSeen) {
-                highestBlockSeen = gameL2BlockNum;
-              }
-
-              // Check if this game covers our withdrawal block
-              if (gameL2BlockNum >= l2BlockNumber) {
-                console.log(`\n✅ Found suitable game covering block ${l2BlockNumber}!`);
-                console.log(`   Game L2 block ${gameL2BlockNum} >= withdrawal block ${l2BlockNumber}`);
-                
-                const gameData = {
-                  gameIndex: i,
-                  gameAddress,
-                  gameType,
-                  gameL2Block: gameL2BlockNum,
-                  rootClaim: rootClaim as string,
-                  timestamp: Number(timestamp)
-                };
-                
-                console.log(`\n🎯 Game Found - Complete Details:`);
-                console.log(`   Game Index: ${gameData.gameIndex}`);
-                console.log(`   Game Address: ${gameData.gameAddress}`);
-                console.log(`   Game Type: ${gameData.gameType}`);
-                console.log(`   Game L2 Block: ${gameData.gameL2Block}`);
-                console.log(`   Root Claim: ${gameData.rootClaim}`);
-                console.log(`   Timestamp: ${gameData.timestamp}`);
-                console.log(`   Created: ${new Date(gameData.timestamp * 1000).toISOString()}`);
-                
-                return gameData;
-              } else {
-                console.log(`   ❌ Game block ${gameL2BlockNum} < withdrawal block ${l2BlockNumber} (too old)`);
-              }
-            }
-
-            // Show progress summary
-            console.log(`\n📊 Progress Summary:`);
-            console.log(`   Highest game block seen: ${highestBlockSeen}`);
-            console.log(`   Need block >= ${l2BlockNumber}`);
-            console.log(`   Still need: ${l2BlockNumber - highestBlockSeen} more blocks`);
-          }
-
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          console.log(`⏳ Waiting for new game... ${elapsed}s elapsed | Games: ${gameCountNum} | Highest: ${highestBlockSeen} | Need: ${l2BlockNumber}`);
-          await new Promise((resolve) => setTimeout(resolve, checkInterval));
-        } catch (error) {
-          console.error(`\n❌ Error during dispute game check:`, error);
-          console.log(`   Continuing to wait...`);
-          await new Promise((resolve) => setTimeout(resolve, checkInterval));
-        }
-      }
-
-      console.log('\n\n❌ Timeout waiting for dispute game after 10 minutes');
-      throw new Error('Timeout waiting for dispute game');
-    } catch (error) {
-      console.error('❌ Failed to wait for dispute game:', error);
-      throw error;
-    }
-  }, [disputeGameAbi, disputeGameFactoryAbi]);
-
-  // Step 3: Generate Merkle Proof
-  const generateProof = useCallback(async (withdrawalDetails: MessagePassedEventData, l2BlockNumber: number, disputeGame: DisputeGameData) => {
-    try {
-      console.log('\n' + '═'.repeat(80));
-      console.log('STEP 3: GENERATE MERKLE PROOF');
-      console.log('═'.repeat(80));
-      
-      // Calculate storage slot
-      const withdrawalHash = withdrawalDetails.withdrawalHash;
-      const paddedZeros = '0x' + '0'.repeat(64);
-      const storageSlot = keccak256(encodeAbiParameters(
-        [{ type: 'bytes32' }, { type: 'bytes32' }],
-        [withdrawalHash as `0x${string}`, paddedZeros as `0x${string}`]
-      ));
-      
-      console.log('\n📊 Proof Parameters:');
-      console.log(`   Withdrawal Hash: ${withdrawalHash}`);
-      console.log(`   Storage Slot: ${storageSlot}`);
-      console.log(`   L2 Block: ${l2BlockNumber}`);
-      console.log(`   Dispute Game Block: ${disputeGame.gameL2Block}`);
-      
-      // Create L2 client for proof generation
-      const l2Client = createPublicClient({
-        transport: http(RPC_URLS.L2),
-      });
-      
-      // Get proof with retry logic - IMPORTANT: proof window is very small, so always use latest
-      console.log(`\n🔍 Getting withdrawal storage proof from L2...`);
-      
-      let proofResult;
-      let actualProofBlock;
-      const maxRetries = 3;
-      
-      // Since proof window issues are common, let's be smarter about block selection
-      console.log(`🔄 Getting proof for address ${CONTRACT_ADDRESSES.L2_TO_L1_MESSAGE_PASSER}`);
-      console.log(`   Note: Due to proof window limitations, will use latest block`);
-      
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          // ALWAYS get the absolute latest block for each attempt
-          const latestBlock = await l2Client.getBlockNumber();
-          console.log(`   Attempt ${attempt}/${maxRetries}: Using latest block ${latestBlock}`);
-          
-          proofResult = await l2Client.getProof({
-            address: CONTRACT_ADDRESSES.L2_TO_L1_MESSAGE_PASSER as `0x${string}`,
-            storageKeys: [storageSlot as `0x${string}`],
-            blockNumber: latestBlock,
-          });
-          
-          console.log(`   ✅ Successfully retrieved proof at block ${latestBlock}`);
-          actualProofBlock = latestBlock;
-          break;
-          
-        } catch (error) {
-          console.log(`   ⚠️ Attempt ${attempt} failed: ${error}`);
-          
-          if (attempt < maxRetries) {
-            // Wait a bit for new blocks before retry
-            console.log(`   Waiting ${3} seconds for new blocks...`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-          } else {
-            console.log(`   ❌ Failed after ${maxRetries} attempts`);
-            console.log(`   Error: ${error}`);
-            throw new Error('Could not get proof within window. The L2 chain might be progressing too fast.');
-          }
-        }
-      }
-      
-      console.log(`   Proof generated at block: ${actualProofBlock}`);
-      
-      console.log('\n📋 Proof Result:');
-      if (proofResult) {
-        console.log(`   Account Proof Nodes: ${proofResult.accountProof.length}`);
-        console.log(`   Storage Hash: ${proofResult.storageHash}`);
-        console.log(`   Storage Proof Nodes: ${proofResult.storageProof[0].proof.length}`);
-        console.log(`   Storage Key: ${proofResult.storageProof[0].key}`);
-        console.log(`   Storage Value: ${proofResult.storageProof[0].value}`);
-      }
-      
-      // Get L2 block data for proof
-      const proofL2Block = await l2Client.getBlock({ blockNumber: actualProofBlock });
-      console.log(`   Proof L2 block hash: ${proofL2Block.hash}`);
-      console.log(`   Proof L2 state root: ${proofL2Block.stateRoot}`);
-      
-      // Also get dispute game L2 block if different
-      let gameL2Block;
-      if (Number(disputeGame.gameL2Block) !== Number(actualProofBlock)) {
-        try {
-          gameL2Block = await l2Client.getBlock({ blockNumber: BigInt(disputeGame.gameL2Block) });
-          console.log(`   Game L2 block hash: ${gameL2Block.hash}`);
-          console.log(`   Game L2 state root: ${gameL2Block.stateRoot}`);
-        } catch {
-          console.log(`   Could not get game L2 block, using proof block`);
-          gameL2Block = proofL2Block;
-        }
-      } else {
-        gameL2Block = proofL2Block;
-      }
-      
-      // Test different combinations to find the correct output root proof
-      console.log('\n🔍 Testing output root proof candidates:');
-      
-      // Debug block data to find why values are undefined
-      console.log('\n🔍 Block data validation:');
-      console.log(`   Game L2 Block Hash: ${gameL2Block?.hash} (type: ${typeof gameL2Block?.hash})`);
-      console.log(`   Game L2 State Root: ${gameL2Block?.stateRoot} (type: ${typeof gameL2Block?.stateRoot})`);
-      console.log(`   Proof L2 Block Hash: ${proofL2Block?.hash} (type: ${typeof proofL2Block?.hash})`);
-      console.log(`   Proof L2 State Root: ${proofL2Block?.stateRoot} (type: ${typeof proofL2Block?.stateRoot})`);
-      console.log(`   Storage Hash: ${proofResult?.storageHash} (type: ${typeof proofResult?.storageHash})`);
-      
-      // Check if any critical values are undefined
-      if (!gameL2Block?.hash || !gameL2Block?.stateRoot) {
-        console.error('❌ Game L2 block data is incomplete!');
-        console.error(`   gameL2Block:`, gameL2Block);
-        throw new Error('Game L2 block data is missing hash or stateRoot');
-      }
-      
-      if (!proofL2Block?.hash || !proofL2Block?.stateRoot) {
-        console.error('❌ Proof L2 block data is incomplete!');
-        console.error(`   proofL2Block:`, proofL2Block);
-        throw new Error('Proof L2 block data is missing hash or stateRoot');
-      }
-      
-      if (!proofResult?.storageHash) {
-        console.error('❌ Proof result is missing storage hash!');
-        console.error(`   proofResult:`, proofResult);
-        throw new Error('Proof result is missing storageHash');
-      }
-
-      const outputRootProofCandidates = [
-        // Candidate 1: Use game block's actual state
-        {
-          version: '0x0000000000000000000000000000000000000000000000000000000000000000',
-          stateRoot: gameL2Block.stateRoot,
-          messagePasserStorageRoot: proofResult.storageHash,
-          latestBlockhash: gameL2Block.hash,
-        },
-        // Candidate 2: Use proof block state with game block hash
-        {
-          version: '0x0000000000000000000000000000000000000000000000000000000000000000',
-          stateRoot: proofL2Block.stateRoot,
-          messagePasserStorageRoot: proofResult.storageHash,
-          latestBlockhash: gameL2Block.hash,
-        },
-        // Candidate 3: All from proof block
-        {
-          version: '0x0000000000000000000000000000000000000000000000000000000000000000',
-          stateRoot: proofL2Block.stateRoot,
-          messagePasserStorageRoot: proofResult.storageHash,
-          latestBlockhash: proofL2Block.hash,
-        }
-      ];
-      
-      let outputRootProof = null;
-      let matchingCandidate = -1;
-      
-      for (let i = 0; i < outputRootProofCandidates.length; i++) {
-        const candidate = outputRootProofCandidates[i];
-        
-        console.log(`\n   Candidate ${i + 1} values:`);
-        console.log(`     Version: ${candidate.version} (type: ${typeof candidate.version})`);
-        console.log(`     State Root: ${candidate.stateRoot} (type: ${typeof candidate.stateRoot})`);
-        console.log(`     Storage Root: ${candidate.messagePasserStorageRoot} (type: ${typeof candidate.messagePasserStorageRoot})`);
-        console.log(`     Block Hash: ${candidate.latestBlockhash} (type: ${typeof candidate.latestBlockhash})`);
-        
-        try {
-          // Compute hash using Optimism's method - simpler approach
-          const encoded = encodeAbiParameters(
-            [
-              { type: 'bytes32', name: 'version' },
-              { type: 'bytes32', name: 'stateRoot' },
-              { type: 'bytes32', name: 'messagePasserStorageRoot' },
-              { type: 'bytes32', name: 'latestBlockhash' }
-            ],
-            [
-              candidate.version as `0x${string}`,
-              candidate.stateRoot as `0x${string}`,
-              candidate.messagePasserStorageRoot as `0x${string}`,
-              candidate.latestBlockhash as `0x${string}`
-            ]
-          );
-          const computedRoot = keccak256(encoded);
-        
-          console.log(`   Candidate ${i + 1}:`);
-          console.log(`     Computed: ${computedRoot}`);
-          
-          if (computedRoot.toLowerCase() === disputeGame.rootClaim.toLowerCase()) {
-            console.log(`     ✅ MATCH! Using candidate ${i + 1}`);
-            outputRootProof = candidate;
-            matchingCandidate = i + 1;
-            break;
-          } else {
-            console.log(`     ❌ No match`);
-          }
-        } catch (error) {
-          console.log(`     ❌ Error computing hash: ${error}`);
-        }
-      }
-      
-      if (!outputRootProof) {
-        console.log('\n⚠️ WARNING: No output root proof candidate matches the dispute game!');
-        console.log('   Using first candidate anyway...');
-        outputRootProof = outputRootProofCandidates[0];
-        matchingCandidate = 1;
-      }
-      
-      console.log(`\n📋 Final Output Root Proof (candidate ${matchingCandidate}):`);
-      console.log(`   Version: ${outputRootProof.version}`);
-      console.log(`   State Root: ${outputRootProof.stateRoot}`);
-      console.log(`   Message Passer Storage Root: ${outputRootProof.messagePasserStorageRoot}`);
-      console.log(`   Latest Block Hash: ${outputRootProof.latestBlockhash}`);
-      console.log(`   Expected Root: ${disputeGame.rootClaim}`);
-      
-      if (!proofResult || !proofResult.storageProof || proofResult.storageProof.length === 0) {
-        throw new Error('No storage proof found');
-      }
-
-      return {
-        withdrawalProof: proofResult.storageProof[0].proof,
-        outputRootProof,
-        storageSlot
-      };
-    } catch (err) {
-      console.error('❌ Failed to generate proof:', err);
-      throw err;
-    }
+  // Notification helper (no-op for now, can be enhanced later)
+  const addNotification = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+  }, []);
+  
+  // L2 to L1 withdrawal functions are now imported from /lib/l2-to-l1/
+  // Use imported waitForDisputeGame function
+  const waitForDisputeGame = useCallback(async (l2BlockNumber: number) => {
+    return await waitForDisputeGameImported(l2BlockNumber);
   }, []);
 
-  // OptimismPortal ABI for proof submission
-  const optimismPortalAbi = useMemo(() => [
-    {
-      type: 'function',
-      name: 'proveWithdrawalTransaction',
-      inputs: [
-        {
-          name: 'withdrawal',
-          type: 'tuple',
-          components: [
-            { name: 'nonce', type: 'uint256' },
-            { name: 'sender', type: 'address' },
-            { name: 'target', type: 'address' },
-            { name: 'value', type: 'uint256' },
-            { name: 'gasLimit', type: 'uint256' },
-            { name: 'data', type: 'bytes' }
-          ]
-        },
-        { name: 'l2OutputIndex', type: 'uint256' },
-        {
-          name: 'outputRootProof',
-          type: 'tuple',
-          components: [
-            { name: 'version', type: 'bytes32' },
-            { name: 'stateRoot', type: 'bytes32' },
-            { name: 'messagePasserStorageRoot', type: 'bytes32' },
-            { name: 'latestBlockhash', type: 'bytes32' }
-          ]
-        },
-        { name: 'withdrawalProof', type: 'bytes[]' }
-      ],
-      outputs: [],
-      stateMutability: 'nonpayable'
-    },
-    {
-      type: 'function',
-      name: 'provenWithdrawals',
-      inputs: [
-        { name: 'withdrawalHash', type: 'bytes32' },
-        { name: 'prover', type: 'address' }
-      ],
-      outputs: [
-        { name: 'outputRoot', type: 'bytes32' },
-        { name: 'timestamp', type: 'uint256' },
-        { name: 'l2OutputIndex', type: 'uint256' }
-      ],
-      stateMutability: 'view'
-    }
-  ] as const, []);
+  // Use imported generateProof function
+  const generateProof = useCallback(async (withdrawalDetails: MessagePassedEventData, l2BlockNumber: number, disputeGame: DisputeGameData) => {
+    return await generateProofImported(withdrawalDetails, l2BlockNumber, disputeGame);
+  }, []);
+
+  // Use imported OptimismPortal ABI
+  const optimismPortalAbi = importedOptimismPortalAbi;
 
   // State for proof submission
   const [proofSubmissionData, setProofSubmissionData] = useState<{
@@ -546,78 +126,31 @@ export function BridgeInterface() {
   // State to track if withdrawal process is complete
   const [isWithdrawalComplete, setIsWithdrawalComplete] = useState(false);
 
-  // Step 4: Submit Proof to L1
-  const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: {
-    withdrawalProof: string[];
-    outputRootProof: {
-      version: string;
-      stateRoot: string;
-      messagePasserStorageRoot: string;
-      latestBlockhash: string;
-    };
-    storageSlot: string;
-  }) => {
-    try {
-      console.log('\n' + '═'.repeat(80));
-      console.log('STEP 4: SUBMIT PROOF TO L1');
-      console.log('═'.repeat(80));
-      
-      const wd = withdrawalDetails;
-      
-      // Build withdrawal tuple
-      const withdrawalTuple = {
-        nonce: BigInt(wd.nonce),
-        sender: wd.sender as `0x${string}`,
-        target: wd.target as `0x${string}`,
-        value: BigInt(wd.value),
-        gasLimit: BigInt(wd.gasLimit),
-        data: wd.data as `0x${string}`
-      };
-      
-      // Build output root proof tuple
-      const outputRootProofTuple = {
-        version: proofData.outputRootProof.version as `0x${string}`,
-        stateRoot: proofData.outputRootProof.stateRoot as `0x${string}`,
-        messagePasserStorageRoot: proofData.outputRootProof.messagePasserStorageRoot as `0x${string}`,
-        latestBlockhash: proofData.outputRootProof.latestBlockhash as `0x${string}`
-      };
-      
-      // Build withdrawal proof array
-      const withdrawalProofArray = proofData.withdrawalProof.map((p: string) => p as `0x${string}`);
-      
-      console.log('\n📊 Proof Parameters:');
-      console.log(`   Withdrawal Nonce: ${withdrawalTuple.nonce}`);
-      console.log(`   Withdrawal Sender: ${withdrawalTuple.sender}`);
-      console.log(`   Withdrawal Target: ${withdrawalTuple.target}`);
-      console.log(`   Withdrawal Value: ${withdrawalTuple.value}`);
-      console.log(`   Withdrawal Gas Limit: ${withdrawalTuple.gasLimit}`);
-      console.log(`   Withdrawal Data Length: ${withdrawalTuple.data.length} bytes`);
-      console.log(`   Game Index: ${disputeGame.gameIndex}`);
-      console.log(`   Output Root Proof Version: ${outputRootProofTuple.version}`);
-      console.log(`   Output Root Proof State Root: ${outputRootProofTuple.stateRoot}`);
-      console.log(`   Output Root Proof Storage Root: ${outputRootProofTuple.messagePasserStorageRoot}`);
-      console.log(`   Output Root Proof Block Hash: ${outputRootProofTuple.latestBlockhash}`);
-      console.log(`   Withdrawal Proof Array Length: ${withdrawalProofArray.length}`);
-      
-      // Store data for proof submission
-      setProofSubmissionData({
-        withdrawalDetails,
-        disputeGame,
-        proofData
-      });
-      
-      console.log('\n📤 Proof data prepared for submission');
-      console.log('   Click the "Submit Proof" button to proceed with wallet interaction');
-      
-      return 'pending_proof_submission';
-    } catch (error) {
-      console.error('❌ Failed to prepare proof submission:', error);
-      throw error;
-    }
-  }, []);
-
-  // Wagmi hook for proof submission
+  // Wagmi hook for proof submission (must be defined before functions that use it)
   const { writeContract: writeProofContract, data: proofTxHash, isPending: isProofPending, error: proofError } = useWriteContract();
+
+  // Use imported submitProof function
+  const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: ProofData) => {
+    // Wrap switchChain to return a Promise
+    const switchChainAsync = async (params: { chainId: number }) => {
+      return new Promise<void>((resolve, reject) => {
+        switchChain(params, {
+          onSuccess: () => resolve(),
+          onError: (error) => reject(error),
+        });
+      });
+    };
+
+    return await submitProofImported({
+      withdrawalDetails,
+      disputeGame,
+      proofData,
+      chainId,
+      switchChain: switchChainAsync,
+      writeProofContract,
+      addNotification,
+    });
+  }, [chainId, switchChain, writeProofContract, addNotification]);
 
   // Wait for proof transaction confirmation
   const { isLoading: isProofConfirming, isSuccess: isProofConfirmed } = useWaitForTransactionReceipt({
@@ -785,314 +318,30 @@ export function BridgeInterface() {
     }
   }, [proofSubmissionData, writeProofContract, chainId, switchChain, optimismPortalAbi]);
 
-  // Step 6: Finalize withdrawal
+  // Use imported finalizeWithdrawal function
   const finalizeWithdrawal = useCallback(async (withdrawalDetails: MessagePassedEventData) => {
-    try {
-      console.log('\n' + '═'.repeat(80));
-      console.log('STEP 6: FINALIZE WITHDRAWAL');
-      console.log('═'.repeat(80));
-      
-      // Wait for challenge period
-      console.log('\n⏳ Waiting 12 second challenge period...');
-      for (let i = 0; i < 12; i++) {
-        console.log(`   ${i + 1}/12 seconds`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      console.log('✅ Challenge period completed');
+    if (!address) return false;
+    return await finalizeWithdrawalImported({
+      withdrawalDetails,
+      address,
+      writeProofContract,
+      setIsWithdrawalComplete,
+      isWithdrawalComplete,
+    });
+  }, [address, writeProofContract, setIsWithdrawalComplete, isWithdrawalComplete]);
 
-      // Create L1 client for reading balances
-      const l1Client = createPublicClient({
-        transport: http(RPC_URLS.L1),
-      });
-
-      // ERC20 ABI for balance checking
-      const erc20Abi = [
-        {
-          type: 'function',
-          name: 'balanceOf',
-          inputs: [{ name: 'account', type: 'address' }],
-          outputs: [{ name: '', type: 'uint256' }],
-          stateMutability: 'view'
-        }
-      ] as const;
-
-      // OptimismPortal ABI for finalization
-      const optimismPortalAbi = [
-        {
-          type: 'function',
-          name: 'finalizeWithdrawalTransaction',
-          inputs: [
-            {
-              name: 'tx',
-              type: 'tuple',
-              components: [
-                { name: 'nonce', type: 'uint256' },
-                { name: 'sender', type: 'address' },
-                { name: 'target', type: 'address' },
-                { name: 'value', type: 'uint256' },
-                { name: 'gasLimit', type: 'uint256' },
-                { name: 'data', type: 'bytes' }
-              ]
-            }
-          ],
-          outputs: [],
-          stateMutability: 'nonpayable'
-        }
-      ] as const;
-
-      const wd = withdrawalDetails;
-      const l1TokenAddress = "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46";
-      const l1StandardBridgeAddress = "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae";
-
-      // Check L1 token balance before
-      console.log('\n📊 Checking L1 token balance before finalization...');
-      const balanceBefore = await l1Client.readContract({
-        address: l1TokenAddress as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [address as `0x${string}`],
-      });
-
-      console.log(`   L1 Token Balance Before: ${balanceBefore.toString()} wei`);
-
-      // Build withdrawal tuple
-      const withdrawalTuple = {
-        nonce: BigInt(wd.nonce),
-        sender: wd.sender as `0x${string}`,
-        target: wd.target as `0x${string}`,
-        value: BigInt(wd.value),
-        gasLimit: BigInt(wd.gasLimit),
-        data: wd.data as `0x${string}`
-      };
-
-      console.log('\n🔧 Finalizing withdrawal transaction...');
-      console.log(`   Withdrawal Tuple:`, withdrawalTuple);
-
-      // Finalize withdrawal using writeContract
-      writeProofContract({
-        address: CONTRACT_ADDRESSES.OPTIMISM_PORTAL as `0x${string}`,
-        abi: optimismPortalAbi,
-        functionName: 'finalizeWithdrawalTransaction',
-        args: [withdrawalTuple],
-      });
-
-      console.log('✅ Finalization transaction sent!');
-
-      // Wait for confirmation (20 seconds)
-      console.log('\n⏳ Waiting 20 seconds for confirmation...');
-      await new Promise(resolve => setTimeout(resolve, 20000));
-
-      // Check L1 token balance after
-      console.log('\n📊 Checking L1 token balance after finalization...');
-      const balanceAfter = await l1Client.readContract({
-        address: l1TokenAddress as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [address as `0x${string}`],
-      });
-
-      // Check L1StandardBridge balance
-      const bridgeBalance = await l1Client.readContract({
-        address: l1TokenAddress as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [l1StandardBridgeAddress as `0x${string}`],
-      });
-
-      console.log('\n📊 Token Balance Summary:');
-      console.log(`   Your L1 Balance Before: ${balanceBefore.toString()} wei`);
-      console.log(`   Your L1 Balance After: ${balanceAfter.toString()} wei`);
-      console.log(`   L1StandardBridge Balance: ${bridgeBalance.toString()} wei`);
-
-      const balanceChange = balanceAfter - balanceBefore;
-      if (balanceChange > BigInt(0)) {
-        console.log(`\n🎉 Withdrawal successful! Received ${balanceChange.toString()} wei`);
-      } else {
-        console.log('\n⚠️ No balance change detected');
-      }
-
-      // Mark withdrawal process as complete
-      setIsWithdrawalComplete(true);
-      console.log('\n✅ Withdrawal process completed successfully!');
-
-      return true;
-    } catch (error) {
-      console.error('❌ Failed to finalize withdrawal:', error);
-      throw error;
-    }
-  }, [address, writeProofContract, setIsWithdrawalComplete]);
-
-  // Step 5: Resolve dispute game
+  // Use imported resolveGame function
   const resolveGame = useCallback(async (gameAddress: string) => {
-    // Prevent multiple simultaneous executions
-    if (isResolvingGame) {
-      console.log('⚠️ Dispute game resolution already in progress, skipping...');
-      return;
-    }
-
-    // Prevent execution if withdrawal is already complete
-    if (isWithdrawalComplete) {
-      console.log('⚠️ Withdrawal process already complete, skipping dispute game resolution...');
-      return;
-    }
-
-    setIsResolvingGame(true);
-    
-    try {
-      console.log('\n' + '═'.repeat(80));
-      console.log('STEP 5: RESOLVE DISPUTE GAME');
-      console.log('═'.repeat(80));
-      
-      
-      // DisputeGame ABI for resolution
-      const disputeGameAbi = [
-        {
-          type: 'function',
-          name: 'status',
-          inputs: [],
-          outputs: [{ name: '', type: 'uint8' }],
-          stateMutability: 'view'
-        },
-        {
-          type: 'function',
-          name: 'createdAt',
-          inputs: [],
-          outputs: [{ name: '', type: 'uint256' }],
-          stateMutability: 'view'
-        },
-        {
-          type: 'function',
-          name: 'claimDataLen',
-          inputs: [],
-          outputs: [{ name: '', type: 'uint256' }],
-          stateMutability: 'view'
-        },
-        {
-          type: 'function',
-          name: 'resolveClaim',
-          inputs: [
-            { name: 'claimIndex', type: 'uint256' },
-            { name: 'claimData', type: 'uint256' }
-          ],
-          outputs: [],
-          stateMutability: 'nonpayable'
-        },
-        {
-          type: 'function',
-          name: 'resolve',
-          inputs: [],
-          outputs: [],
-          stateMutability: 'nonpayable'
-        }
-      ] as const;
-
-      // Create L1 client for reading contract state
-      const l1Client = createPublicClient({
-        transport: http(RPC_URLS.L1),
-      });
-
-      // Check game status
-      console.log('\n📊 Checking game status...');
-      const status = await l1Client.readContract({
-        address: gameAddress as `0x${string}`,
-        abi: disputeGameAbi,
-        functionName: 'status',
-      });
-
-      const statusNames = ['IN_PROGRESS', 'CHALLENGER_WINS', 'DEFENDER_WINS'];
-      console.log(`   Game Status: ${status} (${statusNames[Number(status)]})`);
-
-      if (Number(status) === 2) {
-        console.log('✅ Game already resolved to DEFENDER_WINS');
-        return true;
-      }
-
-      // Check if we need to wait for MAX_CLOCK_DURATION
-      console.log('\n⏰ Checking game creation time...');
-      const createdAt = await l1Client.readContract({
-        address: gameAddress as `0x${string}`,
-        abi: disputeGameAbi,
-        functionName: 'createdAt',
-      });
-
-      const currentTime = Math.floor(Date.now() / 1000);
-      const elapsed = currentTime - Number(createdAt);
-      const maxClockDuration = 30; // 30 seconds for test network
-      const remaining = Math.max(0, maxClockDuration - elapsed);
-
-      if (remaining > 0) {
-        console.log(`⏳ Waiting ${remaining} seconds for MAX_CLOCK_DURATION...`);
-        await new Promise(resolve => setTimeout(resolve, remaining * 1000 + 2000));
-      }
-
-      // Get number of claims to resolve
-      console.log('\n📊 Getting number of claims...');
-      const claimDataLen = await l1Client.readContract({
-        address: gameAddress as `0x${string}`,
-        abi: disputeGameAbi,
-        functionName: 'claimDataLen',
-      });
-
-      console.log(`   Claims to resolve: ${claimDataLen}`);
-
-      // Resolve claims (from newest to oldest)
-      for (let i = Number(claimDataLen) - 1; i >= 0; i--) {
-        try {
-          console.log(`\n🔧 Resolving claim ${i}...`);
-          
-          // Use writeContract to actually send the transaction
-          writeProofContract({
-            address: gameAddress as `0x${string}`,
-            abi: disputeGameAbi,
-            functionName: 'resolveClaim',
-            args: [BigInt(i), BigInt(1)],
-          });
-
-          console.log(`   ✅ Claim ${i} resolution transaction sent`);
-          // Note: In a real implementation, you'd need to wait for this transaction to confirm
-          // For now, we'll simulate waiting
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } catch (e) {
-          console.log(`   ⚠️ Claim ${i} already resolved or failed:`, e);
-        }
-      }
-
-      // Resolve the game
-      try {
-        console.log('\n🎯 Resolving the game...');
-        
-        // Use writeContract to actually send the transaction
-        writeProofContract({
-          address: gameAddress as `0x${string}`,
-          abi: disputeGameAbi,
-          functionName: 'resolve',
-        });
-
-        console.log('✅ Game resolution transaction sent');
-        
-        // Wait for game resolution to confirm
-        console.log('\n⏳ Waiting for game resolution to confirm...');
-        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds for confirmation
-        
-        console.log('✅ Game resolution confirmed');
-      } catch (e) {
-        console.log('⚠️ Game already resolved or failed:', e);
-      }
-
-      // Step 6: Finalize withdrawal after game resolution
-      if (proofSubmissionData) {
-        console.log('\n🎯 Proceeding to finalize withdrawal...');
-        await finalizeWithdrawal(proofSubmissionData.withdrawalDetails);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('❌ Failed to resolve game:', error);
-      throw error;
-    } finally {
-      setIsResolvingGame(false);
-    }
-  }, [writeProofContract, finalizeWithdrawal, proofSubmissionData, isResolvingGame, isWithdrawalComplete]);
+    return await resolveGameImported({
+      gameAddress,
+      writeProofContract,
+      finalizeWithdrawal,
+      withdrawalDetails: proofSubmissionData?.withdrawalDetails || null,
+      isResolvingGame,
+      isWithdrawalComplete,
+      setIsResolvingGame,
+    });
+  }, [writeProofContract, finalizeWithdrawal, proofSubmissionData, isResolvingGame, isWithdrawalComplete, setIsResolvingGame]);
 
   // Monitor proof submission status
   useEffect(() => {
@@ -1102,16 +351,64 @@ export function BridgeInterface() {
     if (isProofConfirming) {
       console.log('\n⏳ Waiting for proof confirmation...');
     }
-    if (isProofConfirmed) {
-      console.log('\n✅ Proof transaction confirmed!');
+    if (isProofConfirmed && proofSubmissionData) {
+      // Get the transaction ID from withdrawal hash
+      const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
       
-      // Step 5: Resolve the dispute game
-      if (proofSubmissionData) {
-        resolveGame(proofSubmissionData.disputeGame.gameAddress);
+      // Check if we're already processing this proof confirmation
+      if (processingTxs.current.has(`proof_${txId}`)) {
+        console.log(`🔄 Proof for ${txId} is already being resolved, skipping duplicate`);
+        return;
+      }
+      
+      // Find the transaction
+      const tx = TransactionStorage.getAll().find(t => 
+        t.withdrawalDetails?.withdrawalHash === txId
+      );
+      
+      // Check if already past proof_confirmed status
+      if (tx && tx.status !== 'proof_submitted' && tx.status !== 'proof_confirmed') {
+        console.log(`ℹ️ Transaction ${tx.id} already past proof confirmation (status: ${tx.status}), skipping Step 5`);
+        return;
+      }
+      
+      console.log('\n✅ Step 4.5 Complete: Proof transaction confirmed!');
+      
+      // Mark as processing
+      processingTxs.current.add(`proof_${txId}`);
+      
+      // Update transaction status
+      if (tx) {
+        TransactionStorage.update({ 
+          id: tx.id, 
+          status: 'proof_confirmed',
+          l1ProofTxHash: proofTxHash as string,
+        });
+        
+        TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
+        
+        console.log('\n🎯 Starting Step 5: Resolving dispute game...');
+        resolveGame(proofSubmissionData.disputeGame.gameAddress)
+          .then(() => {
+            console.log('\n✅ Step 5 Complete: Dispute game resolved!');
+            TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+          })
+          .catch((error) => {
+            console.error('❌ Step 5 FAILED - Cannot proceed to Step 6:', error);
+            TransactionStorage.markError(tx.id, `Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          })
+          .finally(() => {
+            // Remove from processing set when done
+            processingTxs.current.delete(`proof_${txId}`);
+          });
+      } else {
+        console.error('❌ Cannot start Step 5: Transaction not found');
+        processingTxs.current.delete(`proof_${txId}`);
       }
     }
     if (proofError) {
-      console.error('❌ Proof submission failed:', proofError);
+      console.error('❌ Step 4 FAILED: Proof submission transaction failed:', proofError);
+      console.error('   Cannot proceed to Steps 5 & 6');
     }
   }, [proofTxHash, isProofConfirming, isProofConfirmed, proofError, proofSubmissionData, resolveGame]);
 
@@ -1120,6 +417,19 @@ export function BridgeInterface() {
   const logReceiptDetails = useCallback(async (txHash: string) => {
     try {
       console.log('\n⏳ Waiting for transaction confirmation...');
+      
+      // Check if already processing to prevent duplicate processing
+      const tx = TransactionStorage.getById(txHash);
+      if (tx && tx.status !== 'pending' && tx.status !== 'l2_confirmed') {
+        console.log(`⚠️ Transaction ${txHash} is already being processed (status: ${tx.status}), aborting to prevent duplicate`);
+        return;
+      }
+      
+      // Update transaction status: L2 confirmed
+      TransactionStorage.update({
+        id: txHash,
+        status: 'l2_confirmed',
+      });
       
       // Create L2 client
       const l2Client = createPublicClient({
@@ -1193,40 +503,73 @@ export function BridgeInterface() {
         console.log('\n⚠️ No MessagePassed event found in transaction logs');
       }
 
+        // Store withdrawal details and block number
+        if (withdrawalDetails) {
+          TransactionStorage.update({
+            id: txHash,
+            withdrawalDetails,
+            l2BlockNumber: Number(receipt.blockNumber),
+          });
+        }
+
         // Step 2: Wait for dispute game
         if (receipt.blockNumber && withdrawalDetails) {
+          TransactionStorage.update({ id: txHash, status: 'waiting_game' });
           console.log('\n🎮 Starting Step 2: Waiting for dispute game...');
+          
+          let disputeGame;
           try {
-            const disputeGame = await waitForDisputeGame(Number(receipt.blockNumber));
-            console.log('\n✅ Dispute game found!');
+            disputeGame = await waitForDisputeGame(Number(receipt.blockNumber));
+            TransactionStorage.update({ id: txHash, status: 'game_found', disputeGame });
+            console.log('\n✅ Step 2 Complete: Dispute game found!');
             console.log(`   Game Address: ${disputeGame.gameAddress}`);
             console.log(`   Game Index: ${disputeGame.gameIndex}`);
             console.log(`   Game L2 Block: ${disputeGame.gameL2Block}`);
             console.log(`   Root Claim: ${disputeGame.rootClaim}`);
-            
-            // Step 3: Generate Merkle Proof
-            console.log('\n🔧 Starting Step 3: Generating Merkle proof...');
-            try {
-              const proofData = await generateProof(withdrawalDetails, Number(receipt.blockNumber), disputeGame);
-              console.log('\n✅ Merkle proof generated successfully!');
-              console.log(`   Withdrawal Proof Nodes: ${proofData.withdrawalProof.length}`);
-              console.log(`   Storage Slot: ${proofData.storageSlot}`);
-              console.log(`   Output Root Proof:`, proofData.outputRootProof);
-              
-              // Step 4: Submit Proof to L1
-              console.log('\n📤 Starting Step 4: Submitting proof to L1...');
-              try {
-                const proofTxHash = await submitProof(withdrawalDetails, disputeGame, proofData);
-                console.log('\n✅ Proof submitted successfully!');
-                console.log(`   Proof Transaction: ${proofTxHash}`);
-              } catch (error) {
-                console.error('❌ Step 4 failed:', error);
-              }
-            } catch (error) {
-              console.error('❌ Step 3 failed:', error);
-            }
           } catch (error) {
-            console.error('❌ Step 2 failed:', error);
+            console.error('❌ Step 2 FAILED - Cannot proceed to Step 3:', error);
+            TransactionStorage.markError(txHash, `Step 2 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            throw new Error(`Step 2 (Wait for dispute game) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+            
+          // Step 3: Generate Merkle Proof (only if Step 2 succeeded)
+          TransactionStorage.update({ id: txHash, status: 'generating_proof' });
+          console.log('\n🔧 Starting Step 3: Generating Merkle proof...');
+          
+          let proofData;
+          try {
+            proofData = await generateProof(withdrawalDetails, Number(receipt.blockNumber), disputeGame);
+            TransactionStorage.update({ id: txHash, status: 'proof_generated', proofData });
+            console.log('\n✅ Step 3 Complete: Merkle proof generated successfully!');
+            console.log(`   Withdrawal Proof Nodes: ${proofData.withdrawalProof.length}`);
+            console.log(`   Storage Slot: ${proofData.storageSlot}`);
+            console.log(`   Output Root Proof:`, proofData.outputRootProof);
+          } catch (error) {
+            console.error('❌ Step 3 FAILED - Cannot proceed to Step 4:', error);
+            TransactionStorage.markError(txHash, `Step 3 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            throw new Error(`Step 3 (Generate proof) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+              
+          // Step 4: Submit Proof to L1 (only if Step 3 succeeded)
+          TransactionStorage.update({ id: txHash, status: 'submitting_proof' });
+          console.log('\n📤 Starting Step 4: Submitting proof to L1...');
+          
+          try {
+            // Save proof submission data BEFORE submitting - needed for Step 5 when proof is confirmed
+            setProofSubmissionData({
+              withdrawalDetails,
+              disputeGame,
+              proofData,
+            });
+            
+            const proofTxHash = await submitProof(withdrawalDetails, disputeGame, proofData);
+            TransactionStorage.update({ id: txHash, status: 'proof_submitted' });
+            console.log('\n✅ Step 4 Complete: Proof submitted successfully!');
+            console.log(`   Proof Transaction: ${proofTxHash}`);
+            console.log('\n   Steps 5 & 6 (Resolve game and Finalize) will continue automatically...');
+          } catch (error) {
+            console.error('❌ Step 4 FAILED - Cannot proceed to Step 5:', error);
+            throw new Error(`Step 4 (Submit proof) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }
       
@@ -1367,30 +710,64 @@ export function BridgeInterface() {
 
   // Handle L2 transaction hash when it becomes available
   useEffect(() => {
-    if (l2TxData && !l2TxHash) {
+    if (l2TxData && !l2TxHash && address) {
+      // Check if transaction already exists to prevent duplicates
+      const existingTx = TransactionStorage.getById(l2TxData);
+      
+      if (!existingTx) {
+        // Create transaction record in localStorage only if it doesn't exist
+        TransactionStorage.create({
+          id: l2TxData,
+          l2TxHash: l2TxData,
+          status: 'pending',
+          token: fromToken.symbol,
+          amount: fromAmount,
+          fromAddress: address,
+        });
+        
+        console.log(`📝 Created transaction record: ${l2TxData}`);
+      } else {
+        console.log(`ℹ️ Transaction ${l2TxData} already exists, skipping creation`);
+      }
+      
       setL2TxHash(l2TxData);
     }
-  }, [l2TxData, l2TxHash]);
+  }, [l2TxData, l2TxHash, address, fromToken.symbol, fromAmount]);
 
   // Handle L2 transaction receipt
   useEffect(() => {
-    if (l2TxReceipt && l2TxHash && pendingTxId) {
+    if (l2TxReceipt && l2TxHash) {
+      // Check if we're already processing this transaction
+      if (processingTxs.current.has(l2TxHash)) {
+        console.log(`🔄 Transaction ${l2TxHash} is already being processed, skipping duplicate`);
+        return;
+      }
+      
       console.log('L2 Transaction confirmed!');
       console.log('Transaction Hash:', l2TxHash);
       console.log('Block Number:', l2TxReceipt.blockNumber);
-      console.log('Pending Transaction ID:', pendingTxId);
       
-      // Update the pending transaction with the transaction hash
-      updateTransactionHash(pendingTxId, l2TxHash);
+      // Check if we've already processed this transaction to prevent infinite loop
+      const tx = TransactionStorage.getById(l2TxHash);
+      if (tx && tx.status !== 'pending') {
+        console.log(`ℹ️ Transaction ${l2TxHash} already processed (status: ${tx.status}), skipping`);
+        setL2TxHash(null);
+        return;
+      }
       
-      // Log detailed receipt information
-      logReceiptDetails(l2TxHash);
+      // Mark as processing
+      processingTxs.current.add(l2TxHash);
+      
+      // Log detailed receipt information and start L2→L1 withdrawal process
+      logReceiptDetails(l2TxHash).finally(() => {
+        // Remove from processing set when done (either success or error)
+        processingTxs.current.delete(l2TxHash);
+      });
       
       // Reset the state
       setL2TxHash(null);
-      setPendingTxId(null);
     }
-  }, [l2TxReceipt, l2TxHash, pendingTxId, updateTransactionHash, logReceiptDetails]);
+  }, [l2TxReceipt, l2TxHash, logReceiptDetails]);
 
   // Event handlers
   const handleSwap = useCallback(() => {
@@ -1412,17 +789,29 @@ export function BridgeInterface() {
   }, [isSwapping, fromToken, toToken]);
 
   const handleFromAmountChange = useCallback((amount: string) => {
-    setFromAmount(amount);
+    // Only allow numbers, single decimal point, and empty string
+    const validNumberRegex = /^(\d*\.?\d*)$/;
     
-    // Simple conversion logic (1:1 for demo)
-    setToAmount(formatAmount(amount));
+    if (validNumberRegex.test(amount) || amount === '') {
+      setFromAmount(amount);
+      
+      // Simple conversion logic (1:1 for demo)
+      setToAmount(formatAmount(amount));
+    }
+    // If invalid input, do nothing (prevents letters from appearing)
   }, []);
 
   const handleToAmountChange = useCallback((amount: string) => {
-    setToAmount(amount);
+    // Only allow numbers, single decimal point, and empty string
+    const validNumberRegex = /^(\d*\.?\d*)$/;
     
-    // Reverse conversion logic
-    setFromAmount(formatAmount(amount));
+    if (validNumberRegex.test(amount) || amount === '') {
+      setToAmount(amount);
+      
+      // Reverse conversion logic
+      setFromAmount(formatAmount(amount));
+    }
+    // If invalid input, do nothing (prevents letters from appearing)
   }, []);
 
   const handleFromAmountBlur = useCallback(() => {
@@ -1497,35 +886,18 @@ export function BridgeInterface() {
         if (isL2ToL1) {
           // L2 -> L1: Use L2Bridge bridgeErc20
           // Add to pending transactions immediately
-          const pendingId = addPendingTransaction({
-            type: 'L2_TO_L1_PSDN',
-            fromToken: fromToken.symbol,
-            toToken: toToken.symbol,
-            amount: amount.toString(),
+          // L2 -> L1: Use bridgeERC20 on the L2StandardBridge
+          await writeL2BridgeErc20({
+            args: [
+              CONTRACT_ADDRESSES.PSDN_L2, // L2 token address
+              CONTRACT_ADDRESSES.PSDN_L1, // L1 token address
+              amount,
+              MIN_GAS_LIMIT,
+              EMPTY_EXTRA_DATA
+            ],
           });
-
-          // Store the pending transaction ID for later use
-          setPendingTxId(pendingId);
-
-          try {
-            await writeL2BridgeErc20({
-              args: [
-                CONTRACT_ADDRESSES.PSDN_L2, // L2 token address
-                CONTRACT_ADDRESSES.PSDN_L1, // L1 token address
-                amount,
-                MIN_GAS_LIMIT,
-                EMPTY_EXTRA_DATA
-              ],
-            });
-
-
-            // Keep as pending - the full bridge process is still pending
-            // The L1 withdrawal will be processed separately
-          } catch (error) {
-            updateTransactionStatus(pendingId, 'failed');
-            setPendingTxId(null); // Reset on error
-            throw error; // Re-throw to trigger error handling
-          }
+          
+          // Transaction will be tracked automatically when L2 tx hash becomes available
         } else {
           // L1 -> L2: Use existing ERC20 flow
           const needsApproval = !currentAllowance || currentAllowance < amount;
@@ -1561,7 +933,7 @@ export function BridgeInterface() {
     } catch (error) {
       console.error("Transaction failed:", error);
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, addPendingTransaction, toToken.symbol, updateTransactionStatus]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -1640,6 +1012,7 @@ export function BridgeInterface() {
           <div className="space-y-2">
             <input
               type="text"
+              inputMode="decimal"
               value={fromAmount}
               onChange={(e) => {
                 handleFromAmountChange(e.target.value);
@@ -1700,6 +1073,7 @@ export function BridgeInterface() {
           <div className="space-y-2">
             <input
               type="text"
+              inputMode="decimal"
               value={toAmount}
               onChange={(e) => handleToAmountChange(e.target.value)}
               onBlur={handleToAmountBlur}
