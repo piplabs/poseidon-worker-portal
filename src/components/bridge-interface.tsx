@@ -126,8 +126,11 @@ export function BridgeInterface() {
   // State to track if withdrawal process is complete
   const [isWithdrawalComplete, setIsWithdrawalComplete] = useState(false);
 
-  // Wagmi hook for proof submission (must be defined before functions that use it)
+  // Wagmi hooks for L1 transactions
   const { writeContract: writeProofContract, data: proofTxHash, isPending: isProofPending, error: proofError } = useWriteContract();
+  const { writeContract: writeResolveClaimsContract, data: resolveClaimsTxHash } = useWriteContract();
+  const { writeContract: writeResolveGameContract, data: resolveGameTxHash } = useWriteContract();
+  const { writeContract: writeFinalizeContract, data: finalizeTxHash } = useWriteContract();
 
   // Use imported submitProof function
   const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: ProofData) => {
@@ -155,6 +158,21 @@ export function BridgeInterface() {
   // Wait for proof transaction confirmation
   const { isLoading: isProofConfirming, isSuccess: isProofConfirmed } = useWaitForTransactionReceipt({
     hash: proofTxHash,
+  });
+
+  // Wait for resolve claims transaction confirmation
+  const { isLoading: isResolveClaimsConfirming, isSuccess: isResolveClaimsConfirmed, error: resolveClaimsError } = useWaitForTransactionReceipt({
+    hash: resolveClaimsTxHash,
+  });
+
+  // Wait for resolve game transaction confirmation
+  const { isLoading: isResolveGameConfirming, isSuccess: isResolveGameConfirmed, error: resolveGameError } = useWaitForTransactionReceipt({
+    hash: resolveGameTxHash,
+  });
+
+  // Wait for finalize transaction confirmation
+  const { isLoading: isFinalizeConfirming, isSuccess: isFinalizeConfirmed, error: finalizeError } = useWaitForTransactionReceipt({
+    hash: finalizeTxHash,
   });
 
   // Handle proof submission
@@ -324,24 +342,250 @@ export function BridgeInterface() {
     return await finalizeWithdrawalImported({
       withdrawalDetails,
       address,
-      writeProofContract,
+      writeProofContract: writeFinalizeContract,
       setIsWithdrawalComplete,
       isWithdrawalComplete,
     });
-  }, [address, writeProofContract, setIsWithdrawalComplete, isWithdrawalComplete]);
+  }, [address, writeFinalizeContract, setIsWithdrawalComplete, isWithdrawalComplete]);
 
   // Use imported resolveGame function
   const resolveGame = useCallback(async (gameAddress: string) => {
     return await resolveGameImported({
       gameAddress,
-      writeProofContract,
-      finalizeWithdrawal,
-      withdrawalDetails: proofSubmissionData?.withdrawalDetails || null,
+      writeResolveClaimsContract,
+      writeResolveGameContract,
       isResolvingGame,
       isWithdrawalComplete,
       setIsResolvingGame,
     });
-  }, [writeProofContract, finalizeWithdrawal, proofSubmissionData, isResolvingGame, isWithdrawalComplete, setIsResolvingGame]);
+  }, [writeResolveClaimsContract, writeResolveGameContract, isResolvingGame, isWithdrawalComplete, setIsResolvingGame]);
+
+  // Monitor resolve claims transaction status (Step 5a)
+  useEffect(() => {
+    if (resolveClaimsTxHash) {
+      console.log(`\n✅ Resolve Claims Transaction Submitted: ${resolveClaimsTxHash}`);
+      
+      // Update transaction storage
+      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => 
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) {
+          TransactionStorage.update({ 
+            id: tx.id, 
+            l1ResolveClaimsTxHash: resolveClaimsTxHash as string,
+          });
+        }
+      }
+    }
+    if (isResolveClaimsConfirming) {
+      console.log('\n⏳ Waiting for resolve claims confirmation...');
+    }
+    if (isResolveClaimsConfirmed && proofSubmissionData) {
+      console.log('\n✅ Resolve Claims Transaction Confirmed!');
+      console.log('   All claims have been resolved. Now resolving the game...');
+      
+      const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+      const tx = TransactionStorage.getAll().find(t => 
+        t.withdrawalDetails?.withdrawalHash === txId
+      );
+      
+      if (tx) {
+        // Check if we're already processing game resolution
+        if (processingTxs.current.has(`resolve_game_${txId}`)) {
+          console.log(`🔄 Already resolving game for ${txId}, skipping duplicate`);
+          return;
+        }
+        
+        // Mark as processing
+        processingTxs.current.add(`resolve_game_${txId}`);
+        
+        TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
+        
+        // Now send the resolve game transaction
+        console.log('\n🎯 Sending resolve game transaction...');
+        
+        // Get the dispute game address from proof submission data
+        const gameAddress = proofSubmissionData.disputeGame.gameAddress;
+        
+        // Send the resolve game transaction
+        writeResolveGameContract({
+          address: gameAddress as `0x${string}`,
+          abi: [{
+            type: 'function',
+            name: 'resolve',
+            inputs: [],
+            outputs: [],
+            stateMutability: 'nonpayable'
+          }],
+          functionName: 'resolve',
+        });
+        
+        console.log('✅ Resolve game transaction sent - waiting for confirmation...');
+        
+        // Clean up processing flag (will be set again if needed)
+        processingTxs.current.delete(`resolve_game_${txId}`);
+      }
+    }
+    if (resolveClaimsError) {
+      console.error('❌ Resolve Claims Transaction Failed:', resolveClaimsError);
+      
+      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => 
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) {
+          TransactionStorage.markError(tx.id, `Resolve claims transaction failed: ${resolveClaimsError.message}`);
+        }
+      }
+    }
+  }, [resolveClaimsTxHash, isResolveClaimsConfirming, isResolveClaimsConfirmed, resolveClaimsError, proofSubmissionData, writeResolveGameContract]);
+
+  // Monitor resolve game transaction status (Step 5b)
+  useEffect(() => {
+    if (resolveGameTxHash) {
+      console.log(`\n✅ Resolve Game Transaction Submitted: ${resolveGameTxHash}`);
+      
+      // Update transaction storage
+      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => 
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) {
+          TransactionStorage.update({ 
+            id: tx.id, 
+            l1ResolveGameTxHash: resolveGameTxHash as string,
+          });
+        }
+      }
+    }
+    if (isResolveGameConfirming) {
+      console.log('\n⏳ Waiting for resolve game confirmation...');
+    }
+    if (isResolveGameConfirmed && proofSubmissionData) {
+      console.log('\n✅ Resolve Game Transaction Confirmed!');
+      
+      // Check if we're already processing finalization
+      const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+      if (processingTxs.current.has(`finalize_${txId}`)) {
+        console.log(`🔄 Already finalizing ${txId}, skipping duplicate`);
+        return;
+      }
+      
+      const tx = TransactionStorage.getAll().find(t => 
+        t.withdrawalDetails?.withdrawalHash === txId
+      );
+      
+      if (!tx) {
+        console.error('❌ Transaction not found for finalization');
+        return;
+      }
+      
+      // Check if already finalized
+      if (tx.status === 'finalizing' || tx.status === 'completed') {
+        console.log(`ℹ️ Transaction ${tx.id} already at status ${tx.status}, skipping finalization`);
+        return;
+      }
+      
+      // Mark as processing
+      processingTxs.current.add(`finalize_${txId}`);
+      
+      // Update status to game_resolved
+      TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+      
+      console.log('\n🎯 Starting Step 6: Finalizing withdrawal...');
+      TransactionStorage.update({ id: tx.id, status: 'finalizing' });
+      
+      finalizeWithdrawal(proofSubmissionData.withdrawalDetails)
+        .then(() => {
+          console.log('\n✅ Finalization transaction sent!');
+          // Don't mark as completed here - wait for transaction confirmation
+        })
+        .catch((error) => {
+          console.error('❌ Step 6 FAILED:', error);
+          TransactionStorage.markError(tx.id, `Step 6 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        })
+        .finally(() => {
+          processingTxs.current.delete(`finalize_${txId}`);
+        });
+    }
+    if (resolveGameError) {
+      console.error('❌ Resolve Game Transaction Failed:', resolveGameError);
+      
+      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => 
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) {
+          TransactionStorage.markError(tx.id, `Resolve game transaction failed: ${resolveGameError.message}`);
+        }
+      }
+    }
+  }, [resolveGameTxHash, isResolveGameConfirming, isResolveGameConfirmed, resolveGameError, proofSubmissionData, finalizeWithdrawal]);
+
+  // Monitor finalize withdrawal transaction status
+  useEffect(() => {
+    if (finalizeTxHash) {
+      console.log(`\n✅ Finalize Withdrawal Transaction Submitted: ${finalizeTxHash}`);
+      
+      // Update transaction storage
+      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => 
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) {
+          TransactionStorage.update({ 
+            id: tx.id, 
+            l1FinalizeTxHash: finalizeTxHash as string,
+          });
+        }
+      }
+    }
+    if (isFinalizeConfirming) {
+      console.log('\n⏳ Waiting for finalize withdrawal confirmation...');
+    }
+    if (isFinalizeConfirmed && proofSubmissionData) {
+      console.log('\n✅ Finalize Withdrawal Transaction Confirmed!');
+      console.log('🎉 Withdrawal process completed successfully!');
+      
+      const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+      const tx = TransactionStorage.getAll().find(t => 
+        t.withdrawalDetails?.withdrawalHash === txId
+      );
+      
+      if (tx) {
+        // Mark transaction as completed
+        TransactionStorage.update({ 
+          id: tx.id, 
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+        
+        // Mark withdrawal process as complete
+        setIsWithdrawalComplete(true);
+        
+        console.log(`✅ Transaction ${tx.id} marked as completed`);
+      }
+    }
+    if (finalizeError) {
+      console.error('❌ Finalize Withdrawal Transaction Failed:', finalizeError);
+      
+      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        const tx = TransactionStorage.getAll().find(t => 
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) {
+          TransactionStorage.markError(tx.id, `Finalize withdrawal transaction failed: ${finalizeError.message}`);
+        }
+      }
+    }
+  }, [finalizeTxHash, isFinalizeConfirming, isFinalizeConfirmed, finalizeError, proofSubmissionData, setIsWithdrawalComplete]);
 
   // Monitor proof submission status
   useEffect(() => {

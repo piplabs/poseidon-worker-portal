@@ -18,10 +18,12 @@ export type TransactionStatus =
 
 export interface WithdrawalTransaction {
   // Identification
-  id: string;                    // Unique transaction ID (L2 tx hash)
-  l2TxHash: string;             // L2 transaction hash
-  l1ProofTxHash?: string;       // L1 proof transaction hash
-  l1FinalizeTxHash?: string;    // L1 finalization transaction hash
+  id: string;                       // Unique transaction ID (L2 tx hash)
+  l2TxHash: string;                // L2 transaction hash
+  l1ProofTxHash?: string;          // L1 proof transaction hash
+  l1ResolveClaimsTxHash?: string;  // L1 resolve claims transaction hash
+  l1ResolveGameTxHash?: string;    // L1 resolve game transaction hash
+  l1FinalizeTxHash?: string;       // L1 finalization transaction hash
   
   // Status
   status: TransactionStatus;
@@ -78,6 +80,8 @@ export interface TransactionUpdate {
   status?: TransactionStatus;
   errorMessage?: string;
   l1ProofTxHash?: string;
+  l1ResolveClaimsTxHash?: string;
+  l1ResolveGameTxHash?: string;
   l1FinalizeTxHash?: string;
   withdrawalDetails?: WithdrawalTransaction['withdrawalDetails'];
   disputeGame?: WithdrawalTransaction['disputeGame'];
