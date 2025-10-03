@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Clock, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PendingTransactionsModal } from "@/components/pending-transactions-modal";
-import { usePendingTransactionsContext } from "@/contexts/PendingTransactionsContext";
+import { useWithdrawalTransactions } from "@/lib/transaction-tracker";
 
 export function PendingTransactionsTab() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { pendingCount, pendingTransactions } = usePendingTransactionsContext();
+  const { activeTransactions } = useWithdrawalTransactions();
+  
+  const pendingCount = activeTransactions.length;
 
   if (pendingCount === 0) {
     return null;
@@ -30,7 +32,7 @@ export function PendingTransactionsTab() {
         >
           <div className="flex items-center space-x-2">
             <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
-            <span className="font-medium">Pending</span>
+            <span className="font-medium">Withdrawals</span>
             <motion.span
               key={pendingCount}
               initial={{ scale: 1.2 }}
