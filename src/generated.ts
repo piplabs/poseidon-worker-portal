@@ -1317,6 +1317,744 @@ export const mintPsdnConfig = {
 } as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SubnetControlPlane
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ *
+ */
+export const subnetControlPlaneAbi = [
+  { type: 'constructor', inputs: [], stateMutability: 'nonpayable' },
+  {
+    type: 'error',
+    inputs: [{ name: 'target', internalType: 'address', type: 'address' }],
+    name: 'AddressEmptyCode',
+  },
+  {
+    type: 'error',
+    inputs: [
+      { name: 'implementation', internalType: 'address', type: 'address' },
+    ],
+    name: 'ERC1967InvalidImplementation',
+  },
+  { type: 'error', inputs: [], name: 'ERC1967NonPayable' },
+  { type: 'error', inputs: [], name: 'FailedCall' },
+  { type: 'error', inputs: [], name: 'InvalidInitialization' },
+  { type: 'error', inputs: [], name: 'NotInitializing' },
+  {
+    type: 'error',
+    inputs: [{ name: 'owner', internalType: 'address', type: 'address' }],
+    name: 'OwnableInvalidOwner',
+  },
+  {
+    type: 'error',
+    inputs: [{ name: 'account', internalType: 'address', type: 'address' }],
+    name: 'OwnableUnauthorizedAccount',
+  },
+  { type: 'error', inputs: [], name: 'UUPSUnauthorizedCallContext' },
+  {
+    type: 'error',
+    inputs: [{ name: 'slot', internalType: 'bytes32', type: 'bytes32' }],
+    name: 'UUPSUnsupportedProxiableUUID',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'parameter',
+        internalType: 'string',
+        type: 'string',
+        indexed: false,
+      },
+      {
+        name: 'value',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'ConfigUpdated',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'newEpoch',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: true,
+      },
+      {
+        name: 'activeWorkers',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'totalRewards',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'EpochAdvanced',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'version',
+        internalType: 'uint64',
+        type: 'uint64',
+        indexed: false,
+      },
+    ],
+    name: 'Initialized',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'previousOwner',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'newOwner',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+    ],
+    name: 'OwnershipTransferStarted',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'previousOwner',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'newOwner',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+    ],
+    name: 'OwnershipTransferred',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'epoch',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: true,
+      },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'RewardsClaimed',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'implementation',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+    ],
+    name: 'Upgraded',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'activeTasks',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'timestamp',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerHeartbeat',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'missedHeartbeats',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerJailed',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'stakedAmount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'epoch',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerRegistered',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'currentEpoch',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'effectiveEpoch',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerUnstakeRequested',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'amount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerUnstaked',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'UPGRADE_INTERFACE_VERSION',
+    outputs: [{ name: '', internalType: 'string', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'acceptOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'advanceEpoch',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'canAdvanceEpoch',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'workerAddress', internalType: 'address', type: 'address' },
+    ],
+    name: 'checkAndUpdateWorkerStatus',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'epochId', internalType: 'uint256', type: 'uint256' }],
+    name: 'claimRewards',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'worker', internalType: 'address', type: 'address' },
+      { name: 'epochId', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'claimRewardsFor',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getActiveWorkers',
+    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getConfig',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct ISubnetControlPlane.Config',
+        type: 'tuple',
+        components: [
+          { name: 'poseidonToken', internalType: 'address', type: 'address' },
+          { name: 'subnetTreasury', internalType: 'address', type: 'address' },
+          { name: 'minimumStake', internalType: 'uint256', type: 'uint256' },
+          { name: 'rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
+          { name: 'epochInterval', internalType: 'uint256', type: 'uint256' },
+          {
+            name: 'maxActiveWorkers',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'heartbeatInterval',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'maxMissedHeartbeats',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getCurrentEpoch',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct ISubnetControlPlane.Epoch',
+        type: 'tuple',
+        components: [
+          { name: 'epochId', internalType: 'uint256', type: 'uint256' },
+          { name: 'startTime', internalType: 'uint256', type: 'uint256' },
+          { name: 'endTime', internalType: 'uint256', type: 'uint256' },
+          { name: 'totalStaked', internalType: 'uint256', type: 'uint256' },
+          { name: 'totalRewards', internalType: 'uint256', type: 'uint256' },
+          { name: 'finalized', internalType: 'bool', type: 'bool' },
+          {
+            name: 'activeWorkersCount',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getCurrentEpochId',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getCurrentEpochWorkers',
+    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'epochId', internalType: 'uint256', type: 'uint256' }],
+    name: 'getEpoch',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct ISubnetControlPlane.Epoch',
+        type: 'tuple',
+        components: [
+          { name: 'epochId', internalType: 'uint256', type: 'uint256' },
+          { name: 'startTime', internalType: 'uint256', type: 'uint256' },
+          { name: 'endTime', internalType: 'uint256', type: 'uint256' },
+          { name: 'totalStaked', internalType: 'uint256', type: 'uint256' },
+          { name: 'totalRewards', internalType: 'uint256', type: 'uint256' },
+          { name: 'finalized', internalType: 'bool', type: 'bool' },
+          {
+            name: 'activeWorkersCount',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'epochId', internalType: 'uint256', type: 'uint256' }],
+    name: 'getEpochWorkers',
+    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getMinimumStake',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'workerAddr', internalType: 'address', type: 'address' }],
+    name: 'getWorkerInfo',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct ISubnetControlPlane.WorkerInfo',
+        type: 'tuple',
+        components: [
+          { name: 'workerAddress', internalType: 'address', type: 'address' },
+          { name: 'stakedAmount', internalType: 'uint256', type: 'uint256' },
+          { name: 'registeredAt', internalType: 'uint256', type: 'uint256' },
+          { name: 'lastHeartbeat', internalType: 'uint256', type: 'uint256' },
+          { name: 'isActive', internalType: 'bool', type: 'bool' },
+          { name: 'isJailed', internalType: 'bool', type: 'bool' },
+          {
+            name: 'missedHeartbeats',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'unstakeRequestedAt',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'unstakeEffectiveEpoch',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'worker', internalType: 'address', type: 'address' },
+      { name: 'epochId', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'getWorkerRewards',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'admin', internalType: 'address', type: 'address' },
+      { name: '_poseidonToken', internalType: 'address', type: 'address' },
+      { name: '_subnetTreasury', internalType: 'address', type: 'address' },
+      { name: '_minimumStake', internalType: 'uint256', type: 'uint256' },
+      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
+      { name: '_maxActiveWorkers', internalType: 'uint256', type: 'uint256' },
+      { name: '_heartbeatInterval', internalType: 'uint256', type: 'uint256' },
+      {
+        name: '_maxMissedHeartbeats',
+        internalType: 'uint256',
+        type: 'uint256',
+      },
+    ],
+    name: 'initialize',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'admin', internalType: 'address', type: 'address' },
+      { name: '_poseidonToken', internalType: 'address', type: 'address' },
+      { name: '_subnetTreasury', internalType: 'address', type: 'address' },
+      { name: '_minimumStake', internalType: 'uint256', type: 'uint256' },
+      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
+      { name: '_maxActiveWorkers', internalType: 'uint256', type: 'uint256' },
+      { name: '_heartbeatInterval', internalType: 'uint256', type: 'uint256' },
+      {
+        name: '_maxMissedHeartbeats',
+        internalType: 'uint256',
+        type: 'uint256',
+      },
+      { name: '_testMode', internalType: 'bool', type: 'bool' },
+      { name: '_epochInterval', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'initializeWithTestMode',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'isTestMode',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'workerAddr', internalType: 'address', type: 'address' }],
+    name: 'isWorkerActive',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'workerAddr', internalType: 'address', type: 'address' }],
+    name: 'isWorkerJailed',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'owner',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'pendingOwner',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'proxiableUUID',
+    outputs: [{ name: '', internalType: 'bytes32', type: 'bytes32' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'stakeAmount', internalType: 'uint256', type: 'uint256' }],
+    name: 'registerWorker',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'renounceOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'requestUnstake',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'workerAddr', internalType: 'address', type: 'address' }],
+    name: 'shouldBeJailed',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'newOwner', internalType: 'address', type: 'address' }],
+    name: 'transferOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_epochInterval', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'updateEpochInterval',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_heartbeatInterval', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'updateHeartbeatInterval',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_maxActiveWorkers', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'updateMaxActiveWorkers',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      {
+        name: '_maxMissedHeartbeats',
+        internalType: 'uint256',
+        type: 'uint256',
+      },
+    ],
+    name: 'updateMaxMissedHeartbeats',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_minimumStake', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'updateMinimumStake',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_poseidonToken', internalType: 'address', type: 'address' },
+    ],
+    name: 'updatePoseidonToken',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'updateRewardsPerEpoch',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'newImplementation', internalType: 'address', type: 'address' },
+      { name: 'data', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'upgradeToAndCall',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'workerAddress', internalType: 'address', type: 'address' },
+    ],
+    name: 'withdrawStake',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'activeTasks', internalType: 'uint256', type: 'uint256' }],
+    name: 'workerHeartbeat',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+] as const
+
+/**
+ *
+ */
+export const subnetControlPlaneAddress = {
+  11711: '0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B',
+} as const
+
+/**
+ *
+ */
+export const subnetControlPlaneConfig = {
+  address: subnetControlPlaneAddress,
+  abi: subnetControlPlaneAbi,
+} as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // React
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2676,4 +3414,922 @@ export const useWatchMintPsdnUpgradedEvent =
     abi: mintPsdnAbi,
     address: mintPsdnAddress,
     eventName: 'Upgraded',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__
+ *
+ *
+ */
+export const useReadSubnetControlPlane = /*#__PURE__*/ createUseReadContract({
+  abi: subnetControlPlaneAbi,
+  address: subnetControlPlaneAddress,
+})
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"UPGRADE_INTERFACE_VERSION"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneUpgradeInterfaceVersion =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'UPGRADE_INTERFACE_VERSION',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"canAdvanceEpoch"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneCanAdvanceEpoch =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'canAdvanceEpoch',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getActiveWorkers"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetActiveWorkers =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getActiveWorkers',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getConfig"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetConfig =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getConfig',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getCurrentEpoch"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetCurrentEpoch =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getCurrentEpoch',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getCurrentEpochId"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetCurrentEpochId =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getCurrentEpochId',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getCurrentEpochWorkers"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetCurrentEpochWorkers =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getCurrentEpochWorkers',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getEpoch"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetEpoch =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getEpoch',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getEpochWorkers"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetEpochWorkers =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getEpochWorkers',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getMinimumStake"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetMinimumStake =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getMinimumStake',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerInfo"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetWorkerInfo =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getWorkerInfo',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerRewards"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetWorkerRewards =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getWorkerRewards',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"isTestMode"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneIsTestMode =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'isTestMode',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"isWorkerActive"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneIsWorkerActive =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'isWorkerActive',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"isWorkerJailed"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneIsWorkerJailed =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'isWorkerJailed',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"owner"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneOwner =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'owner',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"pendingOwner"`
+ *
+ *
+ */
+export const useReadSubnetControlPlanePendingOwner =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'pendingOwner',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"proxiableUUID"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneProxiableUuid =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'proxiableUUID',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"shouldBeJailed"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneShouldBeJailed =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'shouldBeJailed',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__
+ *
+ *
+ */
+export const useWriteSubnetControlPlane = /*#__PURE__*/ createUseWriteContract({
+  abi: subnetControlPlaneAbi,
+  address: subnetControlPlaneAddress,
+})
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"acceptOwnership"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneAcceptOwnership =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'acceptOwnership',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"advanceEpoch"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneAdvanceEpoch =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'advanceEpoch',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"checkAndUpdateWorkerStatus"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneCheckAndUpdateWorkerStatus =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'checkAndUpdateWorkerStatus',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"claimRewards"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneClaimRewards =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'claimRewards',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"claimRewardsFor"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneClaimRewardsFor =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'claimRewardsFor',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"initialize"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneInitialize =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'initialize',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"initializeWithTestMode"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneInitializeWithTestMode =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'initializeWithTestMode',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"registerWorker"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneRegisterWorker =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'registerWorker',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"renounceOwnership"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneRenounceOwnership =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'renounceOwnership',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"requestUnstake"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneRequestUnstake =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'requestUnstake',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"transferOwnership"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneTransferOwnership =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'transferOwnership',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateEpochInterval"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateEpochInterval =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateEpochInterval',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateHeartbeatInterval"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateHeartbeatInterval =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateHeartbeatInterval',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateMaxActiveWorkers"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateMaxActiveWorkers =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateMaxActiveWorkers',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateMaxMissedHeartbeats"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateMaxMissedHeartbeats =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateMaxMissedHeartbeats',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateMinimumStake"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateMinimumStake =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateMinimumStake',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updatePoseidonToken"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdatePoseidonToken =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updatePoseidonToken',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateRewardsPerEpoch"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateRewardsPerEpoch =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateRewardsPerEpoch',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"upgradeToAndCall"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpgradeToAndCall =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'upgradeToAndCall',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"withdrawStake"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneWithdrawStake =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'withdrawStake',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"workerHeartbeat"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneWorkerHeartbeat =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'workerHeartbeat',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__
+ *
+ *
+ */
+export const useSimulateSubnetControlPlane =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"acceptOwnership"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneAcceptOwnership =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'acceptOwnership',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"advanceEpoch"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneAdvanceEpoch =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'advanceEpoch',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"checkAndUpdateWorkerStatus"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneCheckAndUpdateWorkerStatus =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'checkAndUpdateWorkerStatus',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"claimRewards"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneClaimRewards =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'claimRewards',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"claimRewardsFor"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneClaimRewardsFor =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'claimRewardsFor',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"initialize"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneInitialize =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'initialize',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"initializeWithTestMode"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneInitializeWithTestMode =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'initializeWithTestMode',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"registerWorker"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneRegisterWorker =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'registerWorker',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"renounceOwnership"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneRenounceOwnership =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'renounceOwnership',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"requestUnstake"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneRequestUnstake =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'requestUnstake',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"transferOwnership"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneTransferOwnership =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'transferOwnership',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateEpochInterval"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateEpochInterval =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateEpochInterval',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateHeartbeatInterval"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateHeartbeatInterval =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateHeartbeatInterval',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateMaxActiveWorkers"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateMaxActiveWorkers =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateMaxActiveWorkers',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateMaxMissedHeartbeats"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateMaxMissedHeartbeats =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateMaxMissedHeartbeats',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateMinimumStake"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateMinimumStake =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateMinimumStake',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updatePoseidonToken"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdatePoseidonToken =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updatePoseidonToken',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateRewardsPerEpoch"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateRewardsPerEpoch =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateRewardsPerEpoch',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"upgradeToAndCall"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpgradeToAndCall =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'upgradeToAndCall',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"withdrawStake"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneWithdrawStake =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'withdrawStake',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"workerHeartbeat"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneWorkerHeartbeat =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'workerHeartbeat',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"ConfigUpdated"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneConfigUpdatedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'ConfigUpdated',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"EpochAdvanced"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneEpochAdvancedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'EpochAdvanced',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"Initialized"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneInitializedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'Initialized',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"OwnershipTransferStarted"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneOwnershipTransferStartedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'OwnershipTransferStarted',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"OwnershipTransferred"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneOwnershipTransferredEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'OwnershipTransferred',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"RewardsClaimed"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneRewardsClaimedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'RewardsClaimed',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"Upgraded"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneUpgradedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'Upgraded',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerHeartbeat"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerHeartbeatEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerHeartbeat',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerJailed"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerJailedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerJailed',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerRegistered"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerRegisteredEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerRegistered',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerUnstakeRequested"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerUnstakeRequestedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerUnstakeRequested',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerUnstaked"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerUnstakedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerUnstaked',
   })

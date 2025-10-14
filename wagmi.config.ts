@@ -1,6 +1,6 @@
 import { defineConfig } from '@wagmi/cli'
 import { react } from '@wagmi/cli/plugins'
-import { mintPsdnAbi, bridgeAbi, l2BridgeAbi } from './src/generated'
+import { mintPsdnAbi, bridgeAbi, l2BridgeAbi, subnetControlPlaneAbi } from './src/generated'
 
 
 export default defineConfig({
@@ -30,6 +30,15 @@ export default defineConfig({
     11711: '0x4200000000000000000000000000000000000010',
   }
  }, 
+
+ {
+  name: "SubnetControlPlane",
+  abi: subnetControlPlaneAbi,
+  address: {
+    11711: '0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B',
+  }
+ }
   ],
   plugins: [ react() ],
 })
+
