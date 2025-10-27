@@ -1,11 +1,11 @@
 export const CHAIN_IDS = {
   L1: 1518,
-  L2: 11711,
+  L2: 111811,
 } as const;
 
 export const RPC_URLS = {
   L1: "https://rpc.poseidon.storyrpc.io/",
-  L2: "https://devnet-subnet0.psdnrpc.io",
+  L2: "https://devnet-proteus.psdnrpc.io",
 } as const;
 
 export const CONTRACT_ADDRESSES = {
@@ -42,7 +42,7 @@ export interface Token {
 }
 export const PSDN_L1_TOKEN: Token = {
   symbol: "PSDN",
-  name: "Poseidon L1",
+  name: "PSDN L1",
   balance: ZERO_AMOUNT,
   logo: "https://psdn.ai/icon.png?07720b992e581016",
   color: "bg-blue-500",
@@ -51,7 +51,7 @@ export const PSDN_L1_TOKEN: Token = {
 
 export const PSDN_L2_TOKEN: Token = {
   symbol: "PSDN",
-  name: "Poseidon Subnet 0",
+  name: "PSDN Proteus",
   balance: ZERO_AMOUNT,
   logo: "https://psdn.ai/icon.png?07720b992e581016",
   color: "bg-purple-500",
@@ -69,7 +69,7 @@ export const ETH_L1_TOKEN: Token = {
 
 export const ETH_L2_TOKEN: Token = {
   symbol: "ETH",
-  name: "Ethereum Subnet 0",
+  name: "Ethereum Proteus",
   balance: ZERO_AMOUNT,
   logo: "Ξ",
   color: "bg-gray-600",

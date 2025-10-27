@@ -908,7 +908,7 @@ export const l2BridgeAbi = [
  *
  */
 export const l2BridgeAddress = {
-  11711: '0x4200000000000000000000000000000000000010',
+  111811: '0x4200000000000000000000000000000000000010',
 } as const
 
 /**
@@ -1305,7 +1305,7 @@ export const mintPsdnAbi = [
 */
 export const mintPsdnAddress = {
   1518: '0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46',
-  11711: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
+  111811: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
 } as const
 
 /**
@@ -2043,7 +2043,7 @@ export const subnetControlPlaneAbi = [
  *
  */
 export const subnetControlPlaneAddress = {
-  11711: '0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B',
+  111811: '0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B',
 } as const
 
 /**

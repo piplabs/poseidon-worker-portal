@@ -81,7 +81,7 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
     if (chainId === CHAIN_IDS.L1) {
       return `https://poseidon.storyscan.io/tx/${txHash}`;
     }
-    return `https://devnet-subnet0.psdnscan.io/tx/${txHash}`;
+    return `https://devnet-proteus.psdnscan.io/tx/${txHash}`;
   };
 
   const handleClearActive = () => {
