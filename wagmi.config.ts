@@ -11,7 +11,7 @@ export default defineConfig({
   abi: mintPsdnAbi,
   address: {
     1518: '0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46',
-    11711: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
+    111811: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
   },
  },
 
@@ -27,7 +27,7 @@ export default defineConfig({
   name: "L2Bridge",
   abi: l2BridgeAbi,
   address: {
-    11711: '0x4200000000000000000000000000000000000010',
+    111811: '0x4200000000000000000000000000000000000010',
   }
  }, 
 
@@ -35,7 +35,7 @@ export default defineConfig({
   name: "SubnetControlPlane",
   abi: subnetControlPlaneAbi,
   address: {
-    11711: '0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B',
+    111811: '0xdC805e279e3A4C1F8d244858CaD99f4b5FF9cC0A',
   }
  }
   ],
