@@ -11,7 +11,8 @@ import {
   useWriteMintPsdnApprove,
   useWriteSubnetControlPlaneRequestUnstake,
   useWriteSubnetControlPlaneWithdrawStake,
-  useReadSubnetControlPlaneGetWorkerInfo
+  useReadSubnetControlPlaneGetWorkerInfo,
+  useReadSubnetControlPlaneGetCurrentEpochId
 } from "@/generated";
 import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
@@ -80,6 +81,15 @@ export default function Home() {
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address && isOnL2,
+      refetchInterval: 10000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  // Current epoch read
+  const { data: currentEpochId } = useReadSubnetControlPlaneGetCurrentEpochId({
+    query: { 
+      enabled: isOnL2,
       refetchInterval: 10000,
     },
     chainId: CHAIN_IDS.L2,
@@ -182,12 +192,25 @@ export default function Home() {
   return (
     <>
       <Navbar currentView={currentView} onViewChange={setCurrentView} />
-      <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 pt-24">
-        {/* Content based on current view */}
-      {currentView === 'bridge' ? (
-        <BridgeInterface />
-      ) : currentView === 'stake' ? (
-        <div className="w-full max-w-md mx-auto">
+      <main 
+        className="min-h-screen bg-black text-white flex items-center justify-center p-4 pt-24 relative overflow-hidden"
+        style={{
+          backgroundImage: 'url(/hero-bg.svg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {/* Overlay to slightly dim the background pattern for better content readability */}
+        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+        
+        {/* Content container with proper z-index */}
+        <div className="relative z-10 w-full flex items-center justify-center">
+          {/* Content based on current view */}
+          {currentView === 'bridge' ? (
+            <BridgeInterface />
+          ) : currentView === 'stake' ? (
+            <div className="w-full max-w-md mx-auto">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -220,59 +243,163 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Worker Info Display */}
-            {isOnL2 && address && workerInfo && workerInfo.registeredAt > BigInt(0) && (
-              <div className="bg-muted/50 rounded-xl p-4 space-y-3 border border-border/50">
+            {/* Current Epoch Display */}
+            {isOnL2 && (
+              <div className="bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10 rounded-xl p-4 border border-cyan-500/30">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground">Worker Status</h3>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Current Epoch</p>
+                    <p className="text-3xl font-bold text-white">
+                      {currentEpochId ? currentEpochId.toString() : "Loading..."}
+                    </p>
+                  </div>
                   <div className="flex items-center space-x-2">
-                    {workerInfo.isActive ? (
-                      <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                        Inactive
-                      </span>
-                    )}
-                    {workerInfo.isJailed && (
-                      <span className="px-2 py-1 text-xs font-bold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                        Jailed
-                      </span>
-                    )}
+                    <div className="w-3 h-3 bg-cyan-400 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-cyan-300 font-semibold">Live</span>
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <p className="text-xs text-gray-500 mt-2">Updates every 10 seconds</p>
+              </div>
+            )}
+
+            {/* Worker Info Display */}
+            {isOnL2 && address && (
+              <div className="bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-cyan-500/10 rounded-xl p-5 space-y-4 border border-purple-500/20">
+                {/* Header with Status Badges */}
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
                   <div>
-                    <p className="text-muted-foreground text-xs">Staked Amount</p>
-                    <p className="font-semibold text-foreground">{formatUnits(workerInfo.stakedAmount, 18)} PSDN</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Missed Heartbeats</p>
-                    <p className="font-semibold text-foreground">{workerInfo.missedHeartbeats.toString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Registered At</p>
-                    <p className="font-semibold text-foreground">{new Date(Number(workerInfo.registeredAt) * 1000).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Last Heartbeat</p>
-                    <p className="font-semibold text-foreground">
-                      {workerInfo.lastHeartbeat > BigInt(0) ? new Date(Number(workerInfo.lastHeartbeat) * 1000).toLocaleTimeString() : 'Never'}
+                    <h3 className="text-lg font-bold text-white">Worker Status</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {workerInfo && workerInfo.registeredAt > BigInt(0) 
+                        ? "Real-time worker information"
+                        : "Not registered as a worker"}
                     </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {workerInfo && workerInfo.registeredAt > BigInt(0) ? (
+                      <>
+                        {workerInfo.isActive ? (
+                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                            ● Active
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                            ○ Inactive
+                          </span>
+                        )}
+                        {workerInfo.isJailed && (
+                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                            ⚠ Jailed
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="px-3 py-1 text-xs font-bold rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                        ○ Not Registered
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {workerInfo.unstakeRequestedAt > BigInt(0) && (
-                  <div className="pt-2 border-t border-border/50">
-                    <p className="text-muted-foreground text-xs">Unstake Requested At</p>
-                    <p className="font-semibold text-sm text-foreground">
-                      {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleString()}
+                {/* Worker Address */}
+                <div className="bg-black/30 rounded-lg p-3 border border-white/5">
+                  <p className="text-xs text-gray-400 mb-1">Worker Address</p>
+                  <p className="text-sm font-mono text-white break-all">{address}</p>
+                </div>
+                
+                {/* Main Stats Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Staked Amount */}
+                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
+                    <p className="text-xs text-gray-400 mb-1">Staked Amount</p>
+                    <p className="text-xl font-bold text-white">
+                      {workerInfo && workerInfo.registeredAt > BigInt(0) 
+                        ? formatUnits(workerInfo.stakedAmount, 18)
+                        : "0.00"}
                     </p>
-                    <p className="text-muted-foreground text-xs mt-1">Unstake Effective Epoch: {workerInfo.unstakeEffectiveEpoch.toString()}</p>
+                    <p className="text-xs text-gray-500">PSDN</p>
+                  </div>
+                  
+                  {/* Missed Heartbeats */}
+                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
+                    <p className="text-xs text-gray-400 mb-1">Missed Heartbeats</p>
+                    <p className="text-xl font-bold text-white">
+                      {workerInfo && workerInfo.registeredAt > BigInt(0) 
+                        ? workerInfo.missedHeartbeats.toString()
+                        : "0"}
+                    </p>
+                    <p className="text-xs text-gray-500">Total</p>
+                  </div>
+                  
+                  {/* Registered At */}
+                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
+                    <p className="text-xs text-gray-400 mb-1">Registered At</p>
+                    {workerInfo && workerInfo.registeredAt > BigInt(0) ? (
+                      <>
+                        <p className="text-sm font-semibold text-white">
+                          {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleTimeString()}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-500">Not registered</p>
+                    )}
+                  </div>
+                  
+                  {/* Last Heartbeat */}
+                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
+                    <p className="text-xs text-gray-400 mb-1">Last Heartbeat</p>
+                    {workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.lastHeartbeat > BigInt(0) ? (
+                      <>
+                        <p className="text-sm font-semibold text-white">
+                          {new Date(Number(workerInfo.lastHeartbeat) * 1000).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(Number(workerInfo.lastHeartbeat) * 1000).toLocaleTimeString()}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-500">Never</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Unstake Information (if applicable) */}
+                {workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.unstakeRequestedAt > BigInt(0) && (
+                  <div className="bg-orange-500/10 rounded-lg p-4 border border-orange-500/30 space-y-2">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
+                      <p className="text-sm font-semibold text-orange-300">Unstake Request Pending</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-orange-400/70">Requested At</p>
+                        <p className="text-sm font-semibold text-orange-200">
+                          {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-orange-400/70">
+                          {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleTimeString()}
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-xs text-orange-400/70">Effective Epoch</p>
+                        <p className="text-xl font-bold text-orange-200">
+                          {workerInfo.unstakeEffectiveEpoch.toString()}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
+
+                {/* Timestamp Info */}
+                <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                  <p className="text-xs text-gray-500">Last Updated</p>
+                  <p className="text-xs text-gray-400">{new Date().toLocaleTimeString()}</p>
+                </div>
               </div>
             )}
 
@@ -606,6 +733,7 @@ export default function Home() {
           </motion.div>
         </div>
       )}
+        </div>
       </main>
     </>
   );

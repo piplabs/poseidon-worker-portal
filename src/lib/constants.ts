@@ -15,7 +15,7 @@ export const CONTRACT_ADDRESSES = {
   L2_TO_L1_MESSAGE_PASSER: "0x4200000000000000000000000000000000000016", // Standard Optimism-style message passer
   DISPUTE_GAME_FACTORY: "0x0d10e01efbe6e47b3d25f83a7a0d9b5e59116936",
   OPTIMISM_PORTAL: "0x8ac124c4dac740eea694d1cab914740c44f6ee8f", // L1 OptimismPortal contract
-  SUBNET_CONTROL_PLANE: "0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B", // L2 SubnetControlPlane contract
+  SUBNET_CONTROL_PLANE: "0xdC805e279e3A4C1F8d244858CaD99f4b5FF9cC0A", // L2 SubnetControlPlane contract
 } as const;
 
 export const TOKEN_DECIMALS = 18;
@@ -26,6 +26,9 @@ export const POLLING_INTERVAL = 10000;
 export const SWAP_ANIMATION_DURATION = 0;
 export const MIN_GAS_LIMIT = 200000;
 export const MAX_UINT256 = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+
+// Test mode - set to true to manually progress through withdrawal steps without gas
+export const TEST_MODE = true;
 
 export const DECIMAL_PLACES = {
   BALANCE: 2,
