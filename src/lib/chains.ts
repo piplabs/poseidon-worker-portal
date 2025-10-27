@@ -25,9 +25,9 @@ export const psdnDevnet = defineChain({
   testnet: true, 
 });
 
-export const psdnL2Devnet = defineChain({
-  id: 11711,
-  name: "PSDN Subnet 0 Devnet",
+export const proteusDevnet = defineChain({
+  id: 111811,
+  name: "Proteus Devnet",
   nativeCurrency: {
     decimals: 18,
     name: "Ethereum",
@@ -35,16 +35,16 @@ export const psdnL2Devnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ["https://devnet-subnet0.psdnrpc.io"],
+      http: ["https://devnet-proteus.psdnrpc.io"],
     },
     public: {
-      http: ["https://devnet-subnet0.psdnrpc.io"],
+      http: ["https://devnet-proteus.psdnrpc.io"],
     },
   },
   blockExplorers: {
     default: {
-      name: "PSDN Subnet 0 Explorer",
-      url: "https://devnet-subnet0.psdnscan.io/",
+      name: "Proteus Devnet Explorer",
+      url: "https://devnet-proteus.psdnscan.io/",
     },
   },
   testnet: true,

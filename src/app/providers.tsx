@@ -4,14 +4,14 @@ import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rai
 import { WagmiProvider } from "wagmi";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { PropsWithChildren } from "react";
-import { psdnDevnet, psdnL2Devnet } from "@/lib/chains";
+import { psdnDevnet, proteusDevnet } from "@/lib/chains";
 
 const walletConnectProjectId = "d2cd825c0cca1be5b8a2bddff8ee98a5";
 
 const config = getDefaultConfig({
   appName: "PSDN Bridge",
   projectId: walletConnectProjectId,
-  chains: [psdnDevnet, psdnL2Devnet],
+  chains: [psdnDevnet, proteusDevnet],
   ssr: true, 
 });
 

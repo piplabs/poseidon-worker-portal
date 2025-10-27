@@ -214,7 +214,7 @@ export default function Home() {
                     <span className="px-2 py-1 text-xs font-bold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
                       L2
                     </span>
-                    <span className="text-sm text-muted-foreground">Subnet 0</span>
+                    <span className="text-sm text-muted-foreground">Proteus Devnet</span>
                   </div>
                 </div>
               </div>
@@ -290,7 +290,7 @@ export default function Home() {
                     </div>
                     <div>
                       <div className="text-foreground font-medium">PSDN Stake</div>
-                      <div className="text-muted-foreground text-sm">Subnet 0</div>
+                      <div className="text-muted-foreground text-sm">Proteus Devnet</div>
                     </div>
                   </div>
                 </div>
@@ -315,7 +315,7 @@ export default function Home() {
                   className="w-full mt-6"
                   variant="outline"
                 >
-                  {isSwitchingChain ? "Switching..." : "Switch to Subnet 0 (L2)"}
+                  {isSwitchingChain ? "Switching..." : "Switch to Proteus Devnet (L2)"}
                 </Button>
               ) : (
                 <>
@@ -415,7 +415,7 @@ export default function Home() {
                   className="w-full"
                   variant="outline"
                 >
-                  {isSwitchingChain ? "Switching..." : "Switch to Subnet 0 (L2)"}
+                  {isSwitchingChain ? "Switching..." : "Switch to Proteus Devnet (L2)"}
                 </Button>
               ) : (
                 <>

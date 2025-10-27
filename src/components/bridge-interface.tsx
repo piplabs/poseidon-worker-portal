@@ -718,7 +718,7 @@ export function BridgeInterface() {
   // Network validation
   const isOnCorrectNetwork = useMemo(() => {
     if (isL2ToL1) {
-      // L2 to L1: Should be on Subnet 0 (L2)
+      // L2 to L1: Should be on Proteus Devnet (L2)
       return chainId === CHAIN_IDS.L2;
     } else {
       // L1 to L2: Should be on Poseidon Devnet (L1)
@@ -728,7 +728,7 @@ export function BridgeInterface() {
   
   const requiredNetwork = useMemo(() => {
     if (isL2ToL1) {
-      return { id: CHAIN_IDS.L2, name: 'PSDN Subnet 0' };
+      return { id: CHAIN_IDS.L2, name: 'Proteus Devnet' };
     } else {
       return { id: CHAIN_IDS.L1, name: 'Poseidon Devnet' };
     }
@@ -1328,7 +1328,7 @@ export function BridgeInterface() {
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
                         : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                     }`}>
-                      {fromToken.layer} {fromToken.layer === 'L1' ? '(Poseidon)' : '(Subnet 0)'}
+                      {fromToken.layer} 
                     </span>
                   )}
                 </div>
@@ -1396,7 +1396,7 @@ export function BridgeInterface() {
                       ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
                       : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                   }`}>
-                      {toToken.layer} {toToken.layer === 'L1' ? '(Poseidon)' : '(Subnet 0)'}
+                      {toToken.layer} 
                   </span>
                 )}
               </div>
