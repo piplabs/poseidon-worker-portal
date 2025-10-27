@@ -2043,7 +2043,7 @@ export const subnetControlPlaneAbi = [
  *
  */
 export const subnetControlPlaneAddress = {
-  111811: '0xa9Ea7F91E63896d852c4FCA6124c974adC68Af3B',
+  111811: '0xdC805e279e3A4C1F8d244858CaD99f4b5FF9cC0A',
 } as const
 
 /**

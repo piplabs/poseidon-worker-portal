@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { TokenSelector } from "@/components/token-selector";
 import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
+import { WithdrawalStepsModal } from "@/components/withdrawal-steps-modal";
 import { ChevronDown, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useBalance, useSwitchChain, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -29,6 +30,7 @@ import {
   ZERO_AMOUNT,
   SWAP_ANIMATION_DURATION,
   EMPTY_EXTRA_DATA,
+  TEST_MODE,
   type BridgeOption,
   type Token,
   PSDN_L1_TOKEN,
@@ -75,6 +77,8 @@ export function BridgeInterface() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
   const [l2TxHash, setL2TxHash] = useState<string | null>(null);
+  const [activeWithdrawalTxId, setActiveWithdrawalTxId] = useState<string | null>(null);
+  const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   
   // Track which transactions are currently being processed to prevent duplicates
   const processingTxs = useRef<Set<string>>(new Set());
@@ -1030,6 +1034,10 @@ export function BridgeInterface() {
         });
         
         console.log(`📝 Created L2→L1 PSDN transaction record: ${l2TxData}`);
+        
+        // Open withdrawal modal for this transaction
+        setActiveWithdrawalTxId(l2TxData);
+        setIsWithdrawalModalOpen(true);
       } else {
         console.log(`ℹ️ Transaction ${l2TxData} already exists, skipping creation`);
       }
@@ -1057,6 +1065,10 @@ export function BridgeInterface() {
         });
         
         console.log(`📝 Created L2→L1 ETH transaction record: ${l2EthTxData}`);
+        
+        // Open withdrawal modal for this transaction
+        setActiveWithdrawalTxId(l2EthTxData);
+        setIsWithdrawalModalOpen(true);
       } else {
         console.log(`ℹ️ Transaction ${l2EthTxData} already exists, skipping creation`);
       }
@@ -1192,8 +1204,77 @@ export function BridgeInterface() {
   }, [psdnBalance, psdnL2Balance, ethBalance, ethL2Balance]);
 
 
+  // Handlers for withdrawal modal actions
+  const handleProveWithdrawal = useCallback(() => {
+    if (!activeWithdrawalTxId) return;
+    
+    const tx = TransactionStorage.getById(activeWithdrawalTxId);
+    if (!tx || !tx.withdrawalDetails || !tx.disputeGame || !tx.proofData) {
+      console.error('Cannot prove: missing withdrawal details');
+      return;
+    }
+    
+    // This will trigger the submitProof flow which is already set up
+    submitProof(tx.withdrawalDetails, tx.disputeGame, tx.proofData);
+  }, [activeWithdrawalTxId, submitProof]);
+  
+  const handleResolveGame = useCallback(() => {
+    if (!activeWithdrawalTxId) return;
+    
+    const tx = TransactionStorage.getById(activeWithdrawalTxId);
+    if (!tx || !tx.disputeGame) {
+      console.error('Cannot resolve: missing dispute game');
+      return;
+    }
+    
+    resolveGame(tx.disputeGame.gameAddress, tx.id);
+  }, [activeWithdrawalTxId, resolveGame]);
+  
+  const handleFinalizeWithdrawal = useCallback(() => {
+    if (!activeWithdrawalTxId) return;
+    
+    const tx = TransactionStorage.getById(activeWithdrawalTxId);
+    if (!tx || !tx.withdrawalDetails) {
+      console.error('Cannot finalize: missing withdrawal details');
+      return;
+    }
+    
+    finalizeWithdrawal(tx.withdrawalDetails, tx.id);
+  }, [activeWithdrawalTxId, finalizeWithdrawal]);
+
+  // Test mode: Create a mock withdrawal transaction
+  const handleTestModeWithdrawal = useCallback(() => {
+    if (!address || !TEST_MODE) return;
+    
+    // Create a mock L2 transaction ID
+    const mockTxHash = `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+    
+    // Create transaction record
+    TransactionStorage.create({
+      id: mockTxHash,
+      l2TxHash: mockTxHash,
+      status: 'pending',
+      type: 'L2_TO_L1',
+      token: fromToken.symbol,
+      amount: fromAmount || '0.3',
+      fromAddress: address,
+    });
+    
+    console.log(`📝 Created test L2→L1 transaction: ${mockTxHash}`);
+    
+    // Open withdrawal modal
+    setActiveWithdrawalTxId(mockTxHash);
+    setIsWithdrawalModalOpen(true);
+  }, [address, fromToken.symbol, fromAmount]);
+
   const handleTransact = useCallback(async () => {
     if (!address || !fromAmount || !isValidAmount(fromAmount)) {
+      return;
+    }
+
+    // If in test mode and doing L2->L1, create mock transaction
+    if (TEST_MODE && isL2ToL1) {
+      handleTestModeWithdrawal();
       return;
     }
 
@@ -1267,7 +1348,7 @@ export function BridgeInterface() {
     } catch (error) {
       console.error("Transaction failed:", error);
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol, handleTestModeWithdrawal]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -1287,9 +1368,50 @@ export function BridgeInterface() {
     [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error, l2BridgeEthError]
   );
 
+  // Get active withdrawal transaction for modal
+  // We need to refresh this whenever transactions change
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  useEffect(() => {
+    // Poll for transaction updates while modal is open
+    if (isWithdrawalModalOpen && activeWithdrawalTxId) {
+      const interval = setInterval(() => {
+        setRefreshKey(prev => prev + 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isWithdrawalModalOpen, activeWithdrawalTxId]);
+  
+  const activeWithdrawalTx = useMemo(() => {
+    if (!activeWithdrawalTxId) return null;
+    return TransactionStorage.getById(activeWithdrawalTxId);
+  }, [activeWithdrawalTxId, refreshKey]);
+
+  // Auto-close modal when withdrawal is completed
+  useEffect(() => {
+    if (activeWithdrawalTx && activeWithdrawalTx.status === 'completed') {
+      // Close modal after a short delay when completed
+      const timer = setTimeout(() => {
+        setIsWithdrawalModalOpen(false);
+        setActiveWithdrawalTxId(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeWithdrawalTx]);
+
   return (
     <>
       <PendingTransactionsTab />
+      {activeWithdrawalTx && (
+        <WithdrawalStepsModal
+          isOpen={isWithdrawalModalOpen}
+          onClose={() => setIsWithdrawalModalOpen(false)}
+          transaction={activeWithdrawalTx}
+          onProve={handleProveWithdrawal}
+          onResolve={handleResolveGame}
+          onFinalize={handleFinalizeWithdrawal}
+        />
+      )}
       <div className="w-full max-w-md mx-auto p-2">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -1438,7 +1560,13 @@ export function BridgeInterface() {
           onClick={handleTransact}
           disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
         >
-          {isTransactionPending ? "Processing..." : "Transact"}
+          {isTransactionPending ? "Processing..." : (
+            TEST_MODE && isL2ToL1 ? (
+              <span className="flex items-center gap-2">
+                🧪 Test Withdrawal (No Gas Required)
+              </span>
+            ) : "Transact"
+          )}
         </Button>
         )}
         </div>
