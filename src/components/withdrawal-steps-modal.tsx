@@ -14,6 +14,7 @@ interface WithdrawalStepsModalProps {
   transaction: WithdrawalTransaction;
   onProve: () => void;
   onResolve: () => void;
+  onResolveGame: () => void;
   onFinalize: () => void;
 }
 
@@ -38,6 +39,7 @@ export function WithdrawalStepsModal({
   transaction,
   onProve,
   onResolve,
+  onResolveGame,
   onFinalize,
 }: WithdrawalStepsModalProps) {
   const [activeTab, setActiveTab] = useState<'steps' | 'info'>('steps');
@@ -178,8 +180,12 @@ export function WithdrawalStepsModal({
 
     // Step 2: Prove on L1
     const step2Status: StepStatus =
-      ['game_found', 'generating_proof', 'proof_generated', 'waiting_proof_signature'].includes(txStatus) ? 'active' :
-      ['proof_submitted', 'proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
+      // Only active when proof is generated and ready
+      txStatus === 'proof_generated' ? 'active' :
+      // Show as waiting while generating or waiting for user signature
+      ['game_found', 'generating_proof', 'waiting_proof_signature', 'proof_submitted'].includes(txStatus) ? 'waiting' :
+      // Completed after transaction is CONFIRMED on L1
+      ['proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
        'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
@@ -190,20 +196,33 @@ export function WithdrawalStepsModal({
         ? 'completed' : 'pending';
 
     // Step 3: Resolve Claims on L1
+    // Only active when challenge period is complete (countdown finished) AND proof is confirmed
+    const isChallengePeriodComplete = countdown === null || countdown === 0;
     const resolveClaimsStatus: StepStatus =
-      ['waiting_resolve_signature'].includes(txStatus) ? 'active' :
+      (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ? 'active' :
+      // Show as waiting during challenge period or while waiting for signature
+      (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'waiting' :
+      // Show as waiting while user is signing or transaction is being processed
+      ['waiting_resolve_signature'].includes(txStatus) ? 'waiting' :
+      // Completed once resolve claims transaction is confirmed
       ['resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Step 4: Resolve Game on L1
     const resolveGameStatus: StepStatus =
-      ['resolving_game'].includes(txStatus) ? 'active' :
+      // Active when resolve claims is done and ready for resolve game
+      txStatus === 'resolving_game' ? 'active' :
+      // Completed after resolve game is confirmed
       ['game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Step 5: Finalize withdrawal on L1
+    // Only enable finalize button after challenge period is complete
     const finalizeStatus: StepStatus =
-      ['game_resolved', 'waiting_finalize_signature', 'finalizing'].includes(txStatus) ? 'active' :
+      // Only active when game is fully resolved (this happens after resolve game is confirmed)
+      txStatus === 'game_resolved' ? 'active' :
+      // Show as waiting while user is signing or transaction is confirming
+      ['waiting_finalize_signature', 'finalizing'].includes(txStatus) ? 'waiting' :
       txStatus === 'completed' ? 'completed' : 'pending';
 
     return [
@@ -223,7 +242,7 @@ export function WithdrawalStepsModal({
         description: 'Waiting for dispute game',
         status: waitGameStatus,
         isWaitStep: true,
-        waitDuration: '~1 hour',
+        waitDuration: '~1 minute',
       },
       {
         id: 3,
@@ -260,8 +279,8 @@ export function WithdrawalStepsModal({
         fee: '0.0000005 ETH',
         feeUSD: '$0.001964',
         status: resolveGameStatus,
-        buttonText: 'Resolve',
-        action: undefined, // Automatically triggered after resolve claims
+        buttonText: 'Resolve Game',
+        action: onResolveGame, // User must click to resolve game
       },
       {
         id: 7,
@@ -274,7 +293,7 @@ export function WithdrawalStepsModal({
         action: onFinalize,
       },
     ];
-  }, [transaction, onProve, onResolve, onFinalize, countdown]);
+  }, [transaction, onProve, onResolve, onResolveGame, onFinalize, countdown]);
 
   const getStepIcon = (step: Step) => {
     if (step.status === 'completed') {
