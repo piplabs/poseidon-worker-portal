@@ -11,10 +11,10 @@ export const RPC_URLS = {
 export const CONTRACT_ADDRESSES = {
   PSDN_L1: "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46",
   PSDN_L2: "0x30f627A3de293d408E89D4C3E40a41bbF638bC36",
-  BRIDGE: "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae",
+  BRIDGE: "0x09E0A37b6A03a1561813DFdf3dA203e9bCc77232",
   L2_TO_L1_MESSAGE_PASSER: "0x4200000000000000000000000000000000000016", // Standard Optimism-style message passer
-  DISPUTE_GAME_FACTORY: "0x0d10e01efbe6e47b3d25f83a7a0d9b5e59116936",
-  OPTIMISM_PORTAL: "0x8ac124c4dac740eea694d1cab914740c44f6ee8f", // L1 OptimismPortal contract
+  DISPUTE_GAME_FACTORY: "0x7e72ac9ba979b4323f4cede5484903b3b48249a0",
+  OPTIMISM_PORTAL: "0xF0CF19Bd4f5D221AB87fcF9Ce2ff5d341e704062", // L1 OptimismPortal contract
   SUBNET_CONTROL_PLANE: "0xdC805e279e3A4C1F8d244858CaD99f4b5FF9cC0A", // L2 SubnetControlPlane contract
 } as const;
 
@@ -28,7 +28,7 @@ export const MIN_GAS_LIMIT = 200000;
 export const MAX_UINT256 = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
 // Test mode - set to true to manually progress through withdrawal steps without gas
-export const TEST_MODE = true;
+export const TEST_MODE = false;
 
 export const DECIMAL_PLACES = {
   BALANCE: 2,

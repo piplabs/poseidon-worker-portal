@@ -41,6 +41,37 @@ export function WithdrawalStepsModal({
   onFinalize,
 }: WithdrawalStepsModalProps) {
   const [activeTab, setActiveTab] = useState<'steps' | 'info'>('steps');
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  // Monitor transaction status for countdown timer
+  useEffect(() => {
+    console.log('🕐 Countdown effect triggered. Status:', transaction.status, 'TEST_MODE:', TEST_MODE);
+    
+    // Start countdown when proof is submitted OR confirmed (challenge period starts)
+    if (['proof_submitted', 'proof_confirmed'].includes(transaction.status) && !TEST_MODE) {
+      console.log('✅ Starting countdown from 10 seconds');
+      // Start countdown from 10 seconds
+      setCountdown(10);
+      
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            console.log('⏰ Countdown complete!');
+            return null;
+          }
+          console.log(`⏱️ Countdown: ${prev - 1}s remaining`);
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => {
+        console.log('🧹 Cleaning up countdown timer');
+        clearInterval(timer);
+      };
+    } else {
+      setCountdown(null);
+    }
+  }, [transaction.status]);
 
   // Test mode handlers - manually advance through steps
   const handleTestModeAdvance = (targetStatus: string) => {
@@ -206,11 +237,11 @@ export function WithdrawalStepsModal({
       },
       {
         id: 4,
-        title: 'Wait 7 days',
+        title: countdown !== null ? `Wait ${countdown} seconds` : 'Wait 10 seconds',
         description: 'Challenge period',
         status: waitChallengeStatus,
         isWaitStep: true,
-        waitDuration: '~7 days',
+        waitDuration: countdown !== null ? `${countdown}s remaining` : '~10 seconds',
       },
       {
         id: 5,
@@ -243,7 +274,7 @@ export function WithdrawalStepsModal({
         action: onFinalize,
       },
     ];
-  }, [transaction, onProve, onResolve, onFinalize]);
+  }, [transaction, onProve, onResolve, onFinalize, countdown]);
 
   const getStepIcon = (step: Step) => {
     if (step.status === 'completed') {
@@ -434,14 +465,21 @@ export function WithdrawalStepsModal({
                             >
                               {step.title}
                             </p>
-                            {step.fee && (
+                            {step.isWaitStep && step.waitDuration && step.status === 'waiting' && (
+                              <p className="text-[10px] text-cyan-400 font-semibold animate-pulse">
+                                ⏱️ {step.waitDuration}
+                              </p>
+                            )}
+                            {step.fee && !step.isWaitStep && (
                               <p className="text-[10px] text-gray-500">
                                 💰 {step.fee} <span className="text-gray-600">{step.feeUSD}</span>
                               </p>
                             )}
                           </div>
                         </div>
-                        {step.action && step.buttonText && (
+                        {step.status === 'completed' ? (
+                          <div className="text-green-400 text-lg font-bold">✓</div>
+                        ) : step.action && step.buttonText ? (
                           <Button
                             onClick={step.action}
                             disabled={step.status !== 'active'}
@@ -453,10 +491,7 @@ export function WithdrawalStepsModal({
                           >
                             {step.buttonText}
                           </Button>
-                        )}
-                        {step.status === 'completed' && !step.action && (
-                          <div className="text-gray-400 text-xs font-medium">✓</div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -483,6 +518,12 @@ export function WithdrawalStepsModal({
                     <span className="text-gray-400">Status</span>
                     <span className="text-white font-medium capitalize">
                       {transaction.status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Countdown</span>
+                    <span className="text-cyan-400 font-medium">
+                      {countdown !== null ? `${countdown}s` : 'Not active'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">

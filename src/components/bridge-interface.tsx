@@ -526,18 +526,30 @@ export function BridgeInterface() {
         console.log('\n🎯 Starting Step 5: Preparing resolve transaction...');
         console.log('   Checking game status and waiting for challenge period...');
         
-        resolveGame(proofSubmissionData.disputeGame.gameAddress, tx.id)
-          .then(() => {
-            console.log('\n✅ Step 5: Resolve transaction preparation complete');
-          })
-          .catch((error) => {
-            console.error('❌ Step 5 FAILED - User rejected or error occurred:', error);
-            TransactionStorage.markError(tx.id, `Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          })
-          .finally(() => {
-            // Remove from processing set when done
-            processingTxs.current.delete(`proof_${txId}`);
-          });
+        // Wait 10 seconds for challenge period if not in test mode
+        const challengeDelay = TEST_MODE ? 0 : 10000;
+        if (!TEST_MODE) {
+          console.log('   ⏳ Waiting 10 seconds for challenge period...');
+        }
+        
+        setTimeout(() => {
+          if (!TEST_MODE) {
+            console.log('   ✅ Challenge period complete (10 seconds elapsed)');
+          }
+          
+          resolveGame(proofSubmissionData.disputeGame.gameAddress, tx.id)
+            .then(() => {
+              console.log('\n✅ Step 5: Resolve transaction preparation complete');
+            })
+            .catch((error) => {
+              console.error('❌ Step 5 FAILED - User rejected or error occurred:', error);
+              TransactionStorage.markError(tx.id, `Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            })
+            .finally(() => {
+              // Remove from processing set when done
+              processingTxs.current.delete(`proof_${txId}`);
+            });
+        }, challengeDelay);
       } else {
         console.error('❌ Cannot start Step 5: Transaction not found');
         processingTxs.current.delete(`proof_${txId}`);
