@@ -21,8 +21,8 @@ import { CHAIN_IDS, MAX_UINT256, CONTRACT_ADDRESSES } from "@/lib/constants";
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
-  const [mintAmount, setMintAmount] = useState("100");
-  const [stakeAmount, setStakeAmount] = useState("100");
+  const [mintAmount, setMintAmount] = useState("");
+  const [stakeAmount, setStakeAmount] = useState("");
 
   const { address } = useAccount();
   const chainId = useChainId();
