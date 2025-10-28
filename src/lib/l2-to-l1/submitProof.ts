@@ -77,7 +77,7 @@ export async function submitProof({
 }: SubmitProofParams): Promise<string> {
   try {
     console.log('\n' + '═'.repeat(80));
-    console.log('STEP 4: SUBMIT PROOF TO L1 (AUTOMATED)');
+    console.log('STEP 4: SUBMIT PROOF TO L1');
     console.log('═'.repeat(80));
     
     const wd = withdrawalDetails;
@@ -117,8 +117,8 @@ export async function submitProof({
     console.log(`   Output Root Proof Block Hash: ${initialOutputRootProofTuple.latestBlockhash}`);
     console.log(`   Withdrawal Proof Array Length: ${initialWithdrawalProofArray.length}`);
     
-    console.log('\n📤 Automatically submitting proof to L1...');
-    addNotification('info', '🔄 Automatically submitting proof to L1...');
+    console.log('\n📤 Submitting proof to L1...');
+    addNotification('info', '🔄 Submitting proof to L1...');
     
     // Check if user is on the correct network (Story Poseidon Devnet L1)
     console.log(`🔍 Current chain ID: ${chainId}, Target: ${CHAIN_IDS.L1} (Story Poseidon Devnet L1)`);

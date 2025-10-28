@@ -220,7 +220,7 @@ export function BridgeInterface() {
     }
     if (isResolveClaimsConfirmed && proofSubmissionData) {
       console.log('\n✅ Resolve Claims Transaction Confirmed!');
-      console.log('   All claims have been resolved. Now resolving the game...');
+      console.log('   All claims have been resolved. User must now click "Resolve Game" button');
       
       const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
       const tx = TransactionStorage.getAll().find(t => 
@@ -229,49 +229,18 @@ export function BridgeInterface() {
       
       // GUARD: Don't process if transaction is completed or in error state
       if (!tx) {
-        console.log(`⚠️ Transaction not found for ${txId}, skipping resolve game`);
+        console.log(`⚠️ Transaction not found for ${txId}`);
         return;
       }
       
       if (tx.status === 'completed' || tx.status === 'error') {
-        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping resolve game`);
+        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping status update`);
         return;
       }
       
-      // Check if we're already processing game resolution
-      if (processingTxs.current.has(`resolve_game_${txId}`)) {
-        console.log(`🔄 Already resolving game for ${txId}, skipping duplicate`);
-        return;
-      }
-      
-      // Mark as processing
-      processingTxs.current.add(`resolve_game_${txId}`);
-      
+      // Update status to resolving_game - this enables the "Resolve Game" button
       TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
-      
-      // Now send the resolve game transaction
-      console.log('\n🎯 Sending resolve game transaction...');
-      
-      // Get the dispute game address from proof submission data
-      const gameAddress = proofSubmissionData.disputeGame.gameAddress;
-      
-      // Send the resolve game transaction
-      writeResolveGameContract({
-        address: gameAddress as `0x${string}`,
-        abi: [{
-          type: 'function',
-          name: 'resolve',
-          inputs: [],
-          outputs: [],
-          stateMutability: 'nonpayable'
-        }],
-        functionName: 'resolve',
-      });
-      
-      console.log('✅ Resolve game transaction sent - waiting for confirmation...');
-      
-      // Clean up processing flag (will be set again if needed)
-      processingTxs.current.delete(`resolve_game_${txId}`);
+      console.log('🎯 Resolve Game button is now active - waiting for user to click');
     }
     if (resolveClaimsError) {
       console.error('❌ Resolve Claims Transaction Failed:', resolveClaimsError);
@@ -313,13 +282,7 @@ export function BridgeInterface() {
     if (isResolveGameConfirmed && proofSubmissionData) {
       console.log('\n✅ Resolve Game Transaction Confirmed!');
       
-      // Check if we're already processing finalization
       const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-      if (processingTxs.current.has(`finalize_${txId}`)) {
-        console.log(`🔄 Already finalizing ${txId}, skipping duplicate`);
-        return;
-      }
-      
       const tx = TransactionStorage.getAll().find(t => 
         t.withdrawalDetails?.withdrawalHash === txId
       );
@@ -331,36 +294,21 @@ export function BridgeInterface() {
       
       // GUARD: Don't process if transaction is completed or in error state
       if (tx.status === 'completed' || tx.status === 'error') {
-        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping finalization`);
+        console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping status update`);
         return;
       }
       
-      // Check if already finalizing
+      // Check if already at finalization stage
       if (tx.status === 'finalizing' || tx.status === 'waiting_finalize_signature') {
-        console.log(`ℹ️ Transaction ${tx.id} already at status ${tx.status}, skipping finalization`);
+        console.log(`ℹ️ Transaction ${tx.id} already at status ${tx.status}, skipping update`);
         return;
       }
       
-      // Mark as processing
-      processingTxs.current.add(`finalize_${txId}`);
-      
-      // Update status to game_resolved
+      // Update status to game_resolved - this enables the finalize button
       TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
       
-      console.log('\n🎯 Starting Step 6: Preparing finalize transaction...');
-      console.log('   Waiting for challenge period and checking balances...');
-      
-      finalizeWithdrawal(proofSubmissionData.withdrawalDetails, tx.id)
-        .then(() => {
-          console.log('\n✅ Step 6: Finalize transaction preparation complete');
-        })
-        .catch((error) => {
-          console.error('❌ Step 6 FAILED - User rejected or error occurred:', error);
-          TransactionStorage.markError(tx.id, `Step 6 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        })
-        .finally(() => {
-          processingTxs.current.delete(`finalize_${txId}`);
-        });
+      console.log('\n🎯 Step 6 Ready: Game resolved, ready for finalization');
+      console.log('   User must click the "Get" button in the withdrawal modal to finalize and receive tokens');
     }
     if (resolveGameError) {
       console.error('❌ Resolve Game Transaction Failed:', resolveGameError);
@@ -512,10 +460,8 @@ export function BridgeInterface() {
       
       console.log('\n✅ Step 4.5 Complete: Proof transaction confirmed!');
       
-      // Mark as processing
-      processingTxs.current.add(`proof_${txId}`);
-      
-      // Update transaction status
+      // Update transaction status to proof_confirmed
+      // This enables the challenge period countdown and prepares for user to click "Resolve"
       if (tx) {
         TransactionStorage.update({ 
           id: tx.id, 
@@ -523,36 +469,10 @@ export function BridgeInterface() {
           l1ProofTxHash: proofTxHash as string,
         });
         
-        console.log('\n🎯 Starting Step 5: Preparing resolve transaction...');
-        console.log('   Checking game status and waiting for challenge period...');
-        
-        // Wait 10 seconds for challenge period if not in test mode
-        const challengeDelay = TEST_MODE ? 0 : 10000;
-        if (!TEST_MODE) {
-          console.log('   ⏳ Waiting 10 seconds for challenge period...');
-        }
-        
-        setTimeout(() => {
-          if (!TEST_MODE) {
-            console.log('   ✅ Challenge period complete (10 seconds elapsed)');
-          }
-          
-          resolveGame(proofSubmissionData.disputeGame.gameAddress, tx.id)
-            .then(() => {
-              console.log('\n✅ Step 5: Resolve transaction preparation complete');
-            })
-            .catch((error) => {
-              console.error('❌ Step 5 FAILED - User rejected or error occurred:', error);
-              TransactionStorage.markError(tx.id, `Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            })
-            .finally(() => {
-              // Remove from processing set when done
-              processingTxs.current.delete(`proof_${txId}`);
-            });
-        }, challengeDelay);
+        console.log('\n🎯 Step 5 Ready: Proof confirmed, challenge period starting');
+        console.log('   User must wait for challenge period, then click "Resolve" button to continue');
       } else {
-        console.error('❌ Cannot start Step 5: Transaction not found');
-        processingTxs.current.delete(`proof_${txId}`);
+        console.error('❌ Cannot update status: Transaction not found');
       }
     }
     if (proofError) {
@@ -699,27 +619,18 @@ export function BridgeInterface() {
             throw new Error(`Step 3 (Generate proof) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
               
-          // Step 4: Submit Proof to L1 (only if Step 3 succeeded)
-          TransactionStorage.update({ id: txHash, status: 'waiting_proof_signature' });
-          console.log('\n📤 Starting Step 4: Prompting user to sign proof transaction...');
+          // Step 4: Ready for user to submit proof to L1
+          // Save proof submission data - needed when user clicks the Prove button
+          setProofSubmissionData({
+            withdrawalDetails,
+            disputeGame,
+            proofData,
+          });
           
-          try {
-            // Save proof submission data BEFORE submitting - needed for Step 5 when proof is confirmed
-            setProofSubmissionData({
-              withdrawalDetails,
-              disputeGame,
-              proofData,
-            });
-            
-            // This will prompt the user's wallet - the actual submission happens when they confirm
-            await submitProof(withdrawalDetails, disputeGame, proofData);
-            console.log('\n✅ Step 4: Proof transaction prompt sent to wallet');
-            console.log('   Waiting for user to confirm transaction in wallet...');
-            console.log('   Status will update automatically when transaction is submitted');
-          } catch (error) {
-            console.error('❌ Step 4 FAILED - User rejected or error occurred:', error);
-            throw new Error(`Step 4 (Submit proof) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          }
+          // Update status to indicate proof is ready and waiting for user action
+          TransactionStorage.update({ id: txHash, status: 'proof_generated' });
+          console.log('\n✅ Step 4 Ready: Proof generated, waiting for user to click "Prove" button');
+          console.log('   User must manually click the "Prove" button in the withdrawal modal to continue');
         }
       
     } catch (error) {
@@ -1226,11 +1137,36 @@ export function BridgeInterface() {
       return;
     }
     
-    // This will trigger the submitProof flow which is already set up
-    submitProof(tx.withdrawalDetails, tx.disputeGame, tx.proofData);
+    // Guard: Only allow if proof is ready
+    if (tx.status !== 'proof_generated') {
+      console.log(`⚠️ Cannot prove: transaction status is ${tx.status}, expected 'proof_generated'`);
+      return;
+    }
+    
+    // Guard: Prevent duplicate submissions
+    if (processingTxs.current.has(`prove_${tx.id}`)) {
+      console.log('⚠️ Proof submission already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    processingTxs.current.add(`prove_${tx.id}`);
+    
+    // Update status to waiting for signature
+    TransactionStorage.update({ id: tx.id, status: 'waiting_proof_signature' });
+    console.log('\n📤 User clicked "Prove" - Submitting proof to L1...');
+    
+    // Submit proof - this will prompt user's wallet
+    submitProof(tx.withdrawalDetails, tx.disputeGame, tx.proofData)
+      .catch((error) => {
+        console.error('❌ Proof submission failed:', error);
+        TransactionStorage.markError(tx.id, `Proof submission failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      })
+      .finally(() => {
+        processingTxs.current.delete(`prove_${tx.id}`);
+      });
   }, [activeWithdrawalTxId, submitProof]);
   
-  const handleResolveGame = useCallback(() => {
+  const handleResolveGame = useCallback(async () => {
     if (!activeWithdrawalTxId) return;
     
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
@@ -1239,8 +1175,86 @@ export function BridgeInterface() {
       return;
     }
     
-    resolveGame(tx.disputeGame.gameAddress, tx.id);
+    // Guard: Only allow if proof is confirmed (for resolve claims step)
+    if (tx.status !== 'proof_confirmed') {
+      console.log(`⚠️ Cannot resolve claims: transaction status is ${tx.status}, expected 'proof_confirmed'`);
+      return;
+    }
+    
+    // Guard: Prevent duplicate submissions
+    if (processingTxs.current.has(`resolve_${tx.id}`)) {
+      console.log('⚠️ Resolve claims already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    processingTxs.current.add(`resolve_${tx.id}`);
+    
+    // Check if challenge period has elapsed (only if not in test mode)
+    if (!TEST_MODE) {
+      console.log('\n⏳ User clicked "Resolve" - Challenge period verified by countdown');
+    }
+    
+    console.log('\n🎯 User clicked "Resolve" (Step 5) - Starting resolve claims...');
+    
+    // Call resolveGame - this will send resolve claims transaction
+    resolveGame(tx.disputeGame.gameAddress, tx.id)
+      .catch((error) => {
+        console.error('❌ Resolve claims failed:', error);
+        TransactionStorage.markError(tx.id, `Resolve claims failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      })
+      .finally(() => {
+        processingTxs.current.delete(`resolve_${tx.id}`);
+      });
   }, [activeWithdrawalTxId, resolveGame]);
+  
+  const handleResolveGameFinal = useCallback(() => {
+    if (!activeWithdrawalTxId) return;
+    
+    const tx = TransactionStorage.getById(activeWithdrawalTxId);
+    if (!tx || !proofSubmissionData?.disputeGame) {
+      console.error('Cannot resolve game: missing dispute game data');
+      return;
+    }
+    
+    // Guard: Only allow if resolve claims is complete (status is resolving_game)
+    if (tx.status !== 'resolving_game') {
+      console.log(`⚠️ Cannot resolve game: transaction status is ${tx.status}, expected 'resolving_game'`);
+      return;
+    }
+    
+    // Guard: Prevent duplicate submissions
+    if (processingTxs.current.has(`resolve_game_final_${tx.id}`)) {
+      console.log('⚠️ Resolve game already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    processingTxs.current.add(`resolve_game_final_${tx.id}`);
+    
+    console.log('\n🎯 User clicked "Resolve Game" (Step 6) - Sending resolve game transaction...');
+    
+    // Get the dispute game address from proof submission data
+    const gameAddress = proofSubmissionData.disputeGame.gameAddress;
+    
+    // Send the resolve game transaction directly
+    writeResolveGameContract({
+      address: gameAddress as `0x${string}`,
+      abi: [{
+        type: 'function',
+        name: 'resolve',
+        inputs: [],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }],
+      functionName: 'resolve',
+    });
+    
+    console.log('✅ Resolve game transaction sent - waiting for confirmation...');
+    
+    // Clean up processing flag after a delay
+    setTimeout(() => {
+      processingTxs.current.delete(`resolve_game_final_${tx.id}`);
+    }, 1000);
+  }, [activeWithdrawalTxId, proofSubmissionData, writeResolveGameContract]);
   
   const handleFinalizeWithdrawal = useCallback(() => {
     if (!activeWithdrawalTxId) return;
@@ -1251,7 +1265,31 @@ export function BridgeInterface() {
       return;
     }
     
-    finalizeWithdrawal(tx.withdrawalDetails, tx.id);
+    // Guard: Only allow if game is resolved
+    if (tx.status !== 'game_resolved') {
+      console.log(`⚠️ Cannot finalize: transaction status is ${tx.status}, expected 'game_resolved'`);
+      return;
+    }
+    
+    // Guard: Prevent duplicate submissions
+    if (processingTxs.current.has(`finalize_${tx.id}`)) {
+      console.log('⚠️ Finalization already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    processingTxs.current.add(`finalize_${tx.id}`);
+    
+    console.log('\n🎯 User clicked "Get" - Finalizing withdrawal...');
+    
+    // Call finalizeWithdrawal - this will prompt user's wallet
+    finalizeWithdrawal(tx.withdrawalDetails, tx.id)
+      .catch((error) => {
+        console.error('❌ Finalization failed:', error);
+        TransactionStorage.markError(tx.id, `Finalization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      })
+      .finally(() => {
+        processingTxs.current.delete(`finalize_${tx.id}`);
+      });
   }, [activeWithdrawalTxId, finalizeWithdrawal]);
 
   // Test mode: Create a mock withdrawal transaction
@@ -1421,6 +1459,7 @@ export function BridgeInterface() {
           transaction={activeWithdrawalTx}
           onProve={handleProveWithdrawal}
           onResolve={handleResolveGame}
+          onResolveGame={handleResolveGameFinal}
           onFinalize={handleFinalizeWithdrawal}
         />
       )}
