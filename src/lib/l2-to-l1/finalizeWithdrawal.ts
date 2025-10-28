@@ -36,9 +36,9 @@ export async function finalizeWithdrawal({
     console.log('═'.repeat(80));
     
     // Wait for challenge period
-    console.log('\n⏳ Waiting 12 second challenge period...');
-    for (let i = 0; i < 12; i++) {
-      console.log(`   ${i + 1}/12 seconds`);
+    console.log('\n⏳ Waiting 10 second challenge period...');
+    for (let i = 0; i < 10; i++) {
+      console.log(`   ${i + 1}/10 seconds`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     console.log('✅ Challenge period completed');

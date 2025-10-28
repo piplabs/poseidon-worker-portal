@@ -537,7 +537,7 @@ export const bridgeAbi = [
  *
  */
 export const bridgeAddress = {
-  1518: '0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae',
+  1518: '0x09E0A37b6A03a1561813DFdf3dA203e9bCc77232',
 } as const
 
 /**
