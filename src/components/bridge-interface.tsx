@@ -71,8 +71,8 @@ export function BridgeInterface() {
   // State
   const [fromToken, setFromToken] = useState<Token>(DEFAULT_FROM_TOKEN);
   const [toToken, setToToken] = useState<Token>(DEFAULT_TO_TOKEN);
-  const [fromAmount, setFromAmount] = useState(ZERO_AMOUNT);
-  const [toAmount, setToAmount] = useState(ZERO_AMOUNT);
+  const [fromAmount, setFromAmount] = useState("");
+  const [toAmount, setToAmount] = useState("");
   const [bridgeOption] = useState<BridgeOption>(DEFAULT_BRIDGE_OPTION);
   const [isSwapping, setIsSwapping] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
@@ -740,7 +740,7 @@ export function BridgeInterface() {
   });
 
   const { data: currentAllowance, refetch: refetchAllowance } = useReadMintPsdnAllowance({
-    args: address ? [address, CONTRACT_ADDRESSES.BRIDGE] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.APPROVAL_TARGET] : undefined,
     query: { 
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
@@ -1365,17 +1365,29 @@ export function BridgeInterface() {
           // Transaction will be tracked automatically when L2 tx hash becomes available
         } else {
           // L1 -> L2: Use existing ERC20 flow
+          // Check allowance with debug logging
+          console.log('🔍 Checking approval status...');
+          console.log('   Current allowance:', currentAllowance?.toString());
+          console.log('   Required amount:', amount.toString());
+          console.log('   Approval target:', CONTRACT_ADDRESSES.APPROVAL_TARGET);
+          
           const needsApproval = !currentAllowance || currentAllowance < amount;
+          console.log('   Needs approval?', needsApproval);
           
           if (needsApproval) {
+            console.log('🔐 Requesting approval for', CONTRACT_ADDRESSES.APPROVAL_TARGET);
             // Approve max amount to avoid future approvals
             await writeApprove({
-              args: [CONTRACT_ADDRESSES.BRIDGE, BigInt(MAX_UINT256)],
+              args: [CONTRACT_ADDRESSES.APPROVAL_TARGET, BigInt(MAX_UINT256)],
             });
-            refetchAllowance();
+            console.log('✅ Approval transaction submitted - waiting for confirmation...');
+            // Note: The actual deposit will happen after approval is confirmed
+            // User will need to click the button again after approval confirms
+            return;
           }
           
-          // Then call depositERC20To on the Bridge contract
+          // If we have approval, proceed with deposit
+          console.log('💰 Proceeding with deposit transaction...');
           await writeDepositErc20({
             args: [
               CONTRACT_ADDRESSES.PSDN_L1,
@@ -1417,6 +1429,19 @@ export function BridgeInterface() {
     approveError || bridgeEthError || depositErc20Error || l2BridgeErc20Error || l2BridgeEthError,
     [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error, l2BridgeEthError]
   );
+
+  // Check if approval is needed for PSDN transactions
+  const needsApproval = useMemo(() => {
+    if (fromToken.symbol !== 'PSDN' || isL2ToL1 || !fromAmount || !isValidAmount(fromAmount)) {
+      return false;
+    }
+    try {
+      const amount = parseUnits(fromAmount, TOKEN_DECIMALS);
+      return !currentAllowance || currentAllowance < amount;
+    } catch {
+      return false;
+    }
+  }, [fromToken.symbol, isL2ToL1, fromAmount, currentAllowance]);
 
   // Get active withdrawal transaction for modal
   // We need to refresh this whenever transactions change
@@ -1616,7 +1641,7 @@ export function BridgeInterface() {
               <span className="flex items-center gap-2">
                 🧪 Test Withdrawal (No Gas Required)
               </span>
-            ) : "Transact"
+            ) : needsApproval ? "Approve PSDN" : "Transact"
           )}
         </Button>
         )}
