@@ -41,7 +41,7 @@ export default function Home() {
   } = useWriteMintPsdnApprove();
   
   const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadMintPsdnAllowance({
-    args: address ? [address, CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.APPROVAL_TARGET] : undefined,
     query: { 
       enabled: !!address,
       refetchInterval: 10000,
@@ -81,7 +81,7 @@ export default function Home() {
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address && isOnL2,
-      refetchInterval: 10000,
+      refetchInterval: 5000, // Refetch every 5 seconds
     },
     chainId: CHAIN_IDS.L2,
   });
@@ -90,7 +90,7 @@ export default function Home() {
   const { data: currentEpochId } = useReadSubnetControlPlaneGetCurrentEpochId({
     query: { 
       enabled: isOnL2,
-      refetchInterval: 10000,
+      refetchInterval: 5000, // Refetch every 5 seconds
     },
     chainId: CHAIN_IDS.L2,
   });
@@ -112,9 +112,13 @@ export default function Home() {
     if (!address) return;
     
     try {
+      console.log('🔐 Approving PSDN_L2 for staking operations...');
+      console.log('   Token:', CONTRACT_ADDRESSES.PSDN_L2);
+      console.log('   Spender:', CONTRACT_ADDRESSES.APPROVAL_TARGET);
       await writeApproveStake({
-        args: [CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE, BigInt(MAX_UINT256)],
+        args: [CONTRACT_ADDRESSES.APPROVAL_TARGET, BigInt(MAX_UINT256)],
       });
+      console.log('✅ Approval transaction submitted');
     } catch (err) {
       console.error("Approve stake failed:", err);
     }
