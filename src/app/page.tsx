@@ -12,7 +12,9 @@ import {
   useWriteSubnetControlPlaneRequestUnstake,
   useWriteSubnetControlPlaneWithdrawStake,
   useReadSubnetControlPlaneGetWorkerInfo,
-  useReadSubnetControlPlaneGetCurrentEpochId
+  useReadSubnetControlPlaneGetCurrentEpochId,
+  useReadSubnetControlPlaneGetWorkerRewards,
+  useWriteSubnetControlPlaneClaimRewardsFor
 } from "@/generated";
 import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
@@ -23,6 +25,7 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
   const [mintAmount, setMintAmount] = useState("");
   const [stakeAmount, setStakeAmount] = useState("");
+  const [rewardEpochId, setRewardEpochId] = useState("");
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -95,6 +98,23 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
+  // Claim rewards hooks (must come after currentEpochId)
+  const { data: workerRewards, refetch: refetchWorkerRewards } = useReadSubnetControlPlaneGetWorkerRewards({
+    args: address && currentEpochId ? [address, currentEpochId] : undefined,
+    query: { 
+      enabled: !!address && isOnL2 && !!currentEpochId,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { 
+    writeContract: writeClaimRewards, 
+    isPending: isClaimRewardsPending,
+    isSuccess: isClaimRewardsSuccess,
+    error: claimRewardsError 
+  } = useWriteSubnetControlPlaneClaimRewardsFor();
+
   const handleMint = async () => {
     if (!address || !mintAmount) return;
     
@@ -161,6 +181,19 @@ export default function Home() {
     }
   };
 
+  const handleClaimRewards = async () => {
+    if (!address || !rewardEpochId) return;
+    
+    try {
+      const epochId = BigInt(rewardEpochId);
+      await writeClaimRewards({
+        args: [address, epochId],
+      });
+    } catch (err) {
+      console.error("Claim rewards failed:", err);
+    }
+  };
+
   const handleSwitchToL2 = async () => {
     try {
       await switchChain({ chainId: CHAIN_IDS.L2 });
@@ -193,6 +226,21 @@ export default function Home() {
     }
   }, [isRegisterWorkerSuccess, isRequestUnstakeSuccess, isWithdrawStakeSuccess, refetchWorkerInfo]);
 
+  // Refetch worker rewards after claiming
+  useEffect(() => {
+    if (isClaimRewardsSuccess) {
+      refetchWorkerRewards();
+      refetchWorkerInfo();
+    }
+  }, [isClaimRewardsSuccess, refetchWorkerRewards, refetchWorkerInfo]);
+
+  // Set default epoch to current epoch
+  useEffect(() => {
+    if (currentEpochId && !rewardEpochId) {
+      setRewardEpochId(currentEpochId.toString());
+    }
+  }, [currentEpochId, rewardEpochId]);
+
   return (
     <>
       <Navbar currentView={currentView} onViewChange={setCurrentView} />
@@ -214,148 +262,131 @@ export default function Home() {
           {currentView === 'bridge' ? (
             <BridgeInterface />
           ) : currentView === 'stake' ? (
-            <div className="w-full max-w-md mx-auto">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="bg-card text-card-foreground border rounded-2xl p-6 space-y-4 shadow-lg relative overflow-hidden"
-          >
-            {/* Futuristic background glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-cyan-500/5 rounded-2xl pointer-events-none" />
-            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent pointer-events-none" />
-            
-            {/* Header */}
-            <div className="text-center space-y-3">
-              <div className="flex items-center justify-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center">
-                  <img 
-                    src="https://psdn.ai/icon.png?07720b992e581016" 
-                    alt="PSDN"
-                    className="w-6 h-6 rounded-full object-cover"
-                  />
-                </div>
-                <div className="text-left">
-                  <h1 className="text-2xl font-bold">Register Worker</h1>
+            <div className="w-full max-w-7xl mx-auto px-4">
+              {/* Dashboard Header */}
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="mb-6"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h1 className="text-3xl font-bold">Worker Portal</h1>
+                    <p className="text-muted-foreground text-sm">Manage your worker registration and stake</p>
+                  </div>
                   <div className="flex items-center space-x-2">
-                    <span className="px-2 py-1 text-xs font-bold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                      L2
+                    <span className="px-3 py-1.5 text-xs font-bold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                      Proteus L2
                     </span>
-                    <span className="text-sm text-muted-foreground">Proteus Devnet</span>
                   </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
 
-            {/* Current Epoch Display */}
-            {isOnL2 && (
-              <div className="bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10 rounded-xl p-4 border border-cyan-500/30">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">Current Epoch</p>
-                    <p className="text-3xl font-bold text-white">
-                      {currentEpochId ? currentEpochId.toString() : "Loading..."}
-                    </p>
+              {/* Current Epoch Banner */}
+              {isOnL2 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className="mb-6"
+                >
+                  <div className="bg-gradient-to-r from-cyan-500/30 via-blue-500/30 to-purple-500/30 rounded-xl p-4 border border-cyan-500/40">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Current Epoch</p>
+                          <p className="text-3xl font-bold text-white">
+                            {currentEpochId ? currentEpochId.toString() : "Loading..."}
+                          </p>
+                        </div>
+                        <div className="h-12 w-px bg-white/10"></div>
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Status</p>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                            <span className="text-sm text-cyan-300 font-semibold">Network Live</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500">Updates every 5 seconds</p>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-cyan-400 rounded-full animate-pulse"></div>
-                    <span className="text-xs text-cyan-300 font-semibold">Live</span>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Updates every 10 seconds</p>
-              </div>
-            )}
+                </motion.div>
+              )}
 
-            {/* Worker Info Display */}
-            {isOnL2 && address && (
-              <div className="bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-cyan-500/10 rounded-xl p-5 space-y-4 border border-purple-500/20">
-                {/* Header with Status Badges */}
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Worker Status</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {workerInfo && workerInfo.registeredAt > BigInt(0) 
-                        ? "Real-time worker information"
-                        : "Not registered as a worker"}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {workerInfo && workerInfo.registeredAt > BigInt(0) ? (
-                      <>
-                        {workerInfo.isActive ? (
-                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
-                            ● Active
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">
-                            ○ Inactive
-                          </span>
-                        )}
-                        {workerInfo.isJailed && (
-                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
-                            ⚠ Jailed
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="px-3 py-1 text-xs font-bold rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/30">
-                        ○ Not Registered
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Worker Address */}
-                <div className="bg-black/30 rounded-lg p-3 border border-white/5">
-                  <p className="text-xs text-gray-400 mb-1">Worker Address</p>
-                  <p className="text-sm font-mono text-white break-all">{address}</p>
-                </div>
-                
-                {/* Main Stats Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Staked Amount */}
-                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
-                    <p className="text-xs text-gray-400 mb-1">Staked Amount</p>
-                    <p className="text-xl font-bold text-white">
-                      {workerInfo && workerInfo.registeredAt > BigInt(0) 
-                        ? formatUnits(workerInfo.stakedAmount, 18)
-                        : "0.00"}
+              {/* Quick Stats Grid - Top */}
+              {isOnL2 && address && workerInfo && workerInfo.registeredAt > BigInt(0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                  className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"
+                >
+                  {/* Staked Amount Card */}
+                  <div className="bg-gradient-to-br from-purple-500/30 to-purple-500/15 rounded-xl p-4 border border-purple-500/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Staked Amount</p>
+                      <div className="w-8 h-8 rounded-full bg-purple-500/40 flex items-center justify-center">
+                        <span className="text-purple-400 text-lg">💰</span>
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold text-white mb-1">
+                      {formatUnits(workerInfo.stakedAmount, 18)}
                     </p>
                     <p className="text-xs text-gray-500">PSDN</p>
                   </div>
-                  
-                  {/* Missed Heartbeats */}
-                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
-                    <p className="text-xs text-gray-400 mb-1">Missed Heartbeats</p>
-                    <p className="text-xl font-bold text-white">
-                      {workerInfo && workerInfo.registeredAt > BigInt(0) 
-                        ? workerInfo.missedHeartbeats.toString()
-                        : "0"}
+
+                  {/* Status Card */}
+                  <div className="bg-gradient-to-br from-green-500/30 to-green-500/15 rounded-xl p-4 border border-green-500/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Worker Status</p>
+                      <div className="w-8 h-8 rounded-full bg-green-500/40 flex items-center justify-center">
+                        <span className="text-green-400 text-lg">⚡</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      {workerInfo.isActive ? (
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                          ● Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                          ○ Inactive
+                        </span>
+                      )}
+                      {workerInfo.isJailed && (
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                          ⚠ Jailed
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">Real-time</p>
+                  </div>
+
+                  {/* Missed Heartbeats Card */}
+                  <div className="bg-gradient-to-br from-orange-500/30 to-orange-500/15 rounded-xl p-4 border border-orange-500/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Missed Heartbeats</p>
+                      <div className="w-8 h-8 rounded-full bg-orange-500/40 flex items-center justify-center">
+                        <span className="text-orange-400 text-lg">💔</span>
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold text-white mb-1">
+                      {workerInfo.missedHeartbeats.toString()}
                     </p>
-                    <p className="text-xs text-gray-500">Total</p>
+                    <p className="text-xs text-gray-500">Total Count</p>
                   </div>
-                  
-                  {/* Registered At */}
-                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
-                    <p className="text-xs text-gray-400 mb-1">Registered At</p>
-                    {workerInfo && workerInfo.registeredAt > BigInt(0) ? (
-                      <>
-                        <p className="text-sm font-semibold text-white">
-                          {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleTimeString()}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm font-semibold text-gray-500">Not registered</p>
-                    )}
-                  </div>
-                  
-                  {/* Last Heartbeat */}
-                  <div className="bg-black/30 rounded-lg p-3 border border-white/5">
-                    <p className="text-xs text-gray-400 mb-1">Last Heartbeat</p>
-                    {workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.lastHeartbeat > BigInt(0) ? (
+
+                  {/* Last Heartbeat Card */}
+                  <div className="bg-gradient-to-br from-blue-500/30 to-blue-500/15 rounded-xl p-4 border border-blue-500/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Last Heartbeat</p>
+                      <div className="w-8 h-8 rounded-full bg-blue-500/40 flex items-center justify-center">
+                        <span className="text-blue-400 text-lg">💓</span>
+                      </div>
+                    </div>
+                    {workerInfo.lastHeartbeat > BigInt(0) ? (
                       <>
                         <p className="text-sm font-semibold text-white">
                           {new Date(Number(workerInfo.lastHeartbeat) * 1000).toLocaleDateString()}
@@ -368,256 +399,413 @@ export default function Home() {
                       <p className="text-sm font-semibold text-gray-500">Never</p>
                     )}
                   </div>
-                </div>
+                </motion.div>
+              )}
 
-                {/* Unstake Information (if applicable) */}
-                {workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.unstakeRequestedAt > BigInt(0) && (
-                  <div className="bg-orange-500/10 rounded-lg p-4 border border-orange-500/30 space-y-2">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                      <p className="text-sm font-semibold text-orange-300">Unstake Request Pending</p>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-orange-400/70">Requested At</p>
-                        <p className="text-sm font-semibold text-orange-200">
-                          {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-orange-400/70">
-                          {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleTimeString()}
-                        </p>
+              {/* Unstake Alert Banner */}
+              {isOnL2 && address && workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.25 }}
+                  className="mb-6"
+                >
+                  <div className="bg-orange-500/30 rounded-xl p-4 border border-orange-500/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
+                        <div>
+                          <p className="text-sm font-semibold text-orange-300">Unstake Request Pending</p>
+                          <p className="text-xs text-orange-400/70 mt-0.5">
+                            Requested: {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()} {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleTimeString()}
+                          </p>
+                        </div>
                       </div>
-                      
-                      <div>
+                      <div className="text-right">
                         <p className="text-xs text-orange-400/70">Effective Epoch</p>
-                        <p className="text-xl font-bold text-orange-200">
+                        <p className="text-2xl font-bold text-orange-200">
                           {workerInfo.unstakeEffectiveEpoch.toString()}
                         </p>
                       </div>
                     </div>
                   </div>
-                )}
+                </motion.div>
+              )}
 
-                {/* Timestamp Info */}
-                <div className="flex items-center justify-between pt-2 border-t border-white/5">
-                  <p className="text-xs text-gray-500">Last Updated</p>
-                  <p className="text-xs text-gray-400">{new Date().toLocaleTimeString()}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Register Worker Form */}
-            <div className="space-y-4">
-              <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
-                      <img 
-                        src="https://psdn.ai/icon.png?07720b992e581016" 
-                        alt="PSDN"
-                        className="w-4 h-4 rounded-full object-cover"
-                      />
+              {/* Worker Details Card */}
+              {isOnL2 && address && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                  className="mb-6"
+                >
+                  <div className="bg-card border rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Worker Details</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {workerInfo && workerInfo.registeredAt > BigInt(0) 
+                            ? "Your worker registration information"
+                            : "Not registered as a worker"}
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500">Updated: {new Date().toLocaleTimeString()}</p>
                     </div>
+
+                    {/* Worker Address */}
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground mb-1">Worker Address</p>
+                      <p className="text-sm font-mono text-foreground break-all">{address}</p>
+                    </div>
+                    
+                    {/* Registration Info Grid */}
+                    {workerInfo && workerInfo.registeredAt > BigInt(0) && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-1">Registered At</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleDateString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleTimeString()}
+                          </p>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-1">Total Stake</p>
+                          <p className="text-lg font-bold text-foreground">
+                            {formatUnits(workerInfo.stakedAmount, 18)} PSDN
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Actions Grid - Register, Claim Rewards & Unstake */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                {/* Register Worker Card */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.5, delay: 0.4 }}
+                  className="bg-card border rounded-xl p-6 space-y-4"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
                     <div>
-                      <div className="text-foreground font-medium">PSDN Stake</div>
-                      <div className="text-muted-foreground text-sm">Proteus Devnet</div>
+                      <h3 className="text-lg font-bold">Register Worker</h3>
+                      <p className="text-xs text-muted-foreground">Stake PSDN to register</p>
                     </div>
                   </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={stakeAmount}
-                    onChange={(e) => setStakeAmount(e.target.value)}
-                    placeholder="0"
-                    className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
-                  />
-                  <div className="text-muted-foreground text-sm">Stake amount (PSDN)</div>
-                </div>
+
+                  <div className="space-y-4">
+                    <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Amount</span>
+                        <span className="text-xs text-muted-foreground">PSDN</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={stakeAmount}
+                        onChange={(e) => setStakeAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                      />
+                    </div>
+
+                    {/* Network Check, Approval, and Register Button */}
+                    {!isOnL2 ? (
+                      <Button
+                        onClick={handleSwitchToL2}
+                        disabled={isSwitchingChain}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                      </Button>
+                    ) : (
+                      <>
+                        {/* Check if approval is needed */}
+                        {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
+                          <Button
+                            onClick={handleApproveStake}
+                            disabled={!address || isApproveStakePending}
+                            className="w-full"
+                            variant="outline"
+                          >
+                            {isApproveStakePending ? "Approving..." : "Approve PSDN"}
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={handleRegisterWorker}
+                            disabled={!address || isRegisterWorkerPending || !stakeAmount}
+                            className="w-full"
+                            variant="outline"
+                          >
+                            {isRegisterWorkerPending ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    {/* Status Messages */}
+                    {!address && (
+                      <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                        <span className="text-amber-700 dark:text-amber-300 text-xs">
+                          Connect wallet to register
+                        </span>
+                      </div>
+                    )}
+
+                    {approveStakeError && (
+                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <p className="text-destructive text-xs font-medium">
+                          {approveStakeError.message}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {registerWorkerError && (
+                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <p className="text-destructive text-xs font-medium">
+                          {registerWorkerError.message}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {isApproveStakeSuccess && !isRegisterWorkerSuccess && (
+                      <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span className="text-blue-700 dark:text-blue-300 text-xs">
+                          PSDN approved! You can now register.
+                        </span>
+                      </div>
+                    )}
+                    
+                    {isRegisterWorkerSuccess && (
+                      <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-green-700 dark:text-green-300 text-xs">
+                          Successfully registered with {stakeAmount} PSDN!
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Claim Rewards Card */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                  className="bg-card border rounded-xl p-6 space-y-4"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                    <div>
+                      <h3 className="text-lg font-bold">Claim Rewards</h3>
+                      <p className="text-xs text-muted-foreground">For specific epoch</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Current Rewards Display */}
+                    <div className="bg-gradient-to-br from-green-500/30 to-green-500/15 rounded-xl p-3 border border-green-500/40">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Available Rewards</p>
+                          <p className="text-lg font-bold text-white">
+                            {workerRewards ? formatUnits(workerRewards, 18) : "0.00"} <span className="text-xs text-gray-500">PSDN</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Epoch Input */}
+                    <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Epoch ID</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={rewardEpochId}
+                        onChange={(e) => setRewardEpochId(e.target.value)}
+                        placeholder={currentEpochId ? currentEpochId.toString() : "Enter epoch ID"}
+                        className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                      />
+                    </div>
+
+                    {/* Claim Button */}
+                    {!isOnL2 ? (
+                      <Button
+                        onClick={handleSwitchToL2}
+                        disabled={isSwitchingChain}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleClaimRewards}
+                        disabled={!address || isClaimRewardsPending || !rewardEpochId}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        {isClaimRewardsPending ? "Claiming..." : isClaimRewardsSuccess ? "Claimed!" : "Claim Rewards"}
+                      </Button>
+                    )}
+
+                    {/* Status Messages */}
+                    {!address && (
+                      <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                        <span className="text-amber-700 dark:text-amber-300 text-xs">
+                          Connect wallet to claim
+                        </span>
+                      </div>
+                    )}
+
+                    {claimRewardsError && (
+                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <p className="text-destructive text-xs font-medium">
+                          {claimRewardsError.message}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {isClaimRewardsSuccess && (
+                      <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-green-700 dark:text-green-300 text-xs">
+                          Successfully claimed rewards for epoch {rewardEpochId}!
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Unstake & Withdraw Card */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.5, delay: 0.6 }}
+                  className="bg-card border rounded-xl p-6 space-y-4"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                    <div>
+                      <h3 className="text-lg font-bold">Unstake & Withdraw</h3>
+                      <p className="text-xs text-muted-foreground">Two-step process</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Info Box */}
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">
+                        First request unstake, then withdraw your PSDN tokens after the waiting period.
+                      </p>
+                    </div>
+
+                    {/* Unstake Buttons */}
+                    {!isOnL2 ? (
+                      <Button
+                        onClick={handleSwitchToL2}
+                        disabled={isSwitchingChain}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                      </Button>
+                    ) : (
+                      <>
+                        {/* Step 1: Request Unstake */}
+                        <Button
+                          onClick={handleRequestUnstake}
+                          disabled={!address || isRequestUnstakePending || (workerInfo && workerInfo.unstakeRequestedAt > BigInt(0))}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) 
+                            ? "Unstake Already Requested" 
+                            : isRequestUnstakePending 
+                              ? "Requesting..." 
+                              : isRequestUnstakeSuccess 
+                                ? "Unstake Requested!" 
+                                : "1. Request Unstake"}
+                        </Button>
+
+                        {/* Step 2: Withdraw Stake */}
+                        <Button
+                          onClick={handleWithdrawStake}
+                          disabled={
+                            !address || 
+                            isWithdrawStakePending || 
+                            !(workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)) || 
+                            (workerInfo && workerInfo.stakedAmount === BigInt(0))
+                          }
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {workerInfo && workerInfo.stakedAmount === BigInt(0)
+                            ? "Already Withdrawn"
+                            : isWithdrawStakePending 
+                              ? "Withdrawing..." 
+                              : isWithdrawStakeSuccess 
+                                ? "Withdrawn!" 
+                                : "2. Withdraw Stake"}
+                        </Button>
+                      </>
+                    )}
+
+                    {/* Status Messages */}
+                    {!address && (
+                      <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                        <span className="text-amber-700 dark:text-amber-300 text-xs">
+                          Connect wallet to unstake
+                        </span>
+                      </div>
+                    )}
+
+                    {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
+                      <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span className="text-blue-700 dark:text-blue-300 text-xs">
+                          Unstake requested. Waiting for epoch {workerInfo.unstakeEffectiveEpoch.toString()} to withdraw.
+                        </span>
+                      </div>
+                    )}
+
+                    {requestUnstakeError && (
+                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <p className="text-destructive text-xs font-medium">
+                          {requestUnstakeError.message}
+                        </p>
+                      </div>
+                    )}
+
+                    {withdrawStakeError && (
+                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <p className="text-destructive text-xs font-medium">
+                          {withdrawStakeError.message}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount === BigInt(0) && (
+                      <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-green-700 dark:text-green-300 text-xs">
+                          Successfully withdrawn your stake!
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
               </div>
-
-              {/* Network Check, Approval, and Register Button */}
-              {!isOnL2 ? (
-                <Button
-                  onClick={handleSwitchToL2}
-                  disabled={isSwitchingChain}
-                  className="w-full mt-6"
-                  variant="outline"
-                >
-                  {isSwitchingChain ? "Switching..." : "Switch to Proteus Devnet (L2)"}
-                </Button>
-              ) : (
-                <>
-                  {/* Check if approval is needed */}
-                  {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
-                    <Button
-                      onClick={handleApproveStake}
-                      disabled={!address || isApproveStakePending}
-                      className="w-full mt-6"
-                      variant="outline"
-                    >
-                      {isApproveStakePending ? "Approving..." : "Approve PSDN"}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleRegisterWorker}
-                      disabled={!address || isRegisterWorkerPending || !stakeAmount}
-                      className="w-full mt-6"
-                      variant="outline"
-                    >
-                      {isRegisterWorkerPending ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
-                    </Button>
-                  )}
-                </>
-              )}
-
-              {/* Status Messages */}
-              {approveStakeError && (
-                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-destructive text-sm font-medium">
-                    Approval Error: {approveStakeError.message}
-                  </p>
-                </div>
-              )}
-              
-              {registerWorkerError && (
-                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-destructive text-sm font-medium">
-                    Error: {registerWorkerError.message}
-                  </p>
-                </div>
-              )}
-              
-              {isApproveStakeSuccess && !isRegisterWorkerSuccess && (
-                <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-blue-700 dark:text-blue-300 text-sm font-medium">
-                    PSDN approved! You can now register as a worker.
-                  </span>
-                </div>
-              )}
-              
-              {isRegisterWorkerSuccess && (
-                <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-green-700 dark:text-green-300 text-sm font-medium">
-                    Successfully registered as worker with {stakeAmount} PSDN stake!
-                  </span>
-                </div>
-              )}
-
-              {/* Wallet Connection Status */}
-              {!address && (
-                <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span className="text-amber-700 dark:text-amber-300 text-sm font-medium">
-                    Please connect your wallet to register as a worker
-                  </span>
-                </div>
-              )}
             </div>
-          </motion.div>
-
-          {/* Unstake Section */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-            className="bg-card text-card-foreground border rounded-2xl p-6 space-y-4 shadow-lg relative overflow-hidden mt-4"
-          >
-            {/* Futuristic background glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 via-orange-500/5 to-yellow-500/5 rounded-2xl pointer-events-none" />
-            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent pointer-events-none" />
-            
-            {/* Header */}
-            <div className="text-center space-y-2">
-              <h2 className="text-xl font-bold">Unstake & Withdraw</h2>
-              <p className="text-sm text-muted-foreground">Request to unstake, then withdraw your PSDN</p>
-            </div>
-
-            {/* Unstake Buttons */}
-            <div className="space-y-3">
-              {!isOnL2 ? (
-                <Button
-                  onClick={handleSwitchToL2}
-                  disabled={isSwitchingChain}
-                  className="w-full"
-                  variant="outline"
-                >
-                  {isSwitchingChain ? "Switching..." : "Switch to Proteus Devnet (L2)"}
-                </Button>
-              ) : (
-                <>
-                  {/* Step 1: Request Unstake */}
-                  <Button
-                    onClick={handleRequestUnstake}
-                    disabled={!address || isRequestUnstakePending}
-                    className="w-full"
-                    variant="outline"
-                  >
-                    {isRequestUnstakePending ? "Requesting..." : isRequestUnstakeSuccess ? "Unstake Requested!" : "1. Request Unstake"}
-                  </Button>
-
-                  {/* Step 2: Withdraw Stake (only enabled after request is successful) */}
-                  <Button
-                    onClick={handleWithdrawStake}
-                    disabled={!address || !isRequestUnstakeSuccess || isWithdrawStakePending}
-                    className="w-full"
-                    variant="outline"
-                  >
-                    {isWithdrawStakePending ? "Withdrawing..." : isWithdrawStakeSuccess ? "Withdrawn!" : "2. Withdraw Stake"}
-                  </Button>
-                </>
-              )}
-
-              {/* Unstake Status Messages */}
-              {requestUnstakeError && (
-                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-destructive text-sm font-medium">
-                    Request Unstake Error: {requestUnstakeError.message}
-                  </p>
-                </div>
-              )}
-
-              {withdrawStakeError && (
-                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-destructive text-sm font-medium">
-                    Withdraw Error: {withdrawStakeError.message}
-                  </p>
-                </div>
-              )}
-              
-              {isRequestUnstakeSuccess && !isWithdrawStakeSuccess && (
-                <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-blue-700 dark:text-blue-300 text-sm font-medium">
-                    Unstake requested! You can now withdraw your stake.
-                  </span>
-                </div>
-              )}
-              
-              {isWithdrawStakeSuccess && (
-                <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-green-700 dark:text-green-300 text-sm font-medium">
-                    Successfully withdrawn your stake!
-                  </span>
-                </div>
-              )}
-
-              {!address && (
-                <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span className="text-amber-700 dark:text-amber-300 text-sm font-medium">
-                    Please connect your wallet to unstake
-                  </span>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
       ) : (
         <div className="w-full max-w-md mx-auto">
           <motion.div 

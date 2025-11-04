@@ -182,16 +182,18 @@ export function WithdrawalStepsModal({
     const step2Status: StepStatus =
       // Only active when proof is generated and ready
       txStatus === 'proof_generated' ? 'active' :
-      // Show as waiting while generating or waiting for user signature
-      ['game_found', 'generating_proof', 'waiting_proof_signature', 'proof_submitted'].includes(txStatus) ? 'waiting' :
-      // Completed after transaction is CONFIRMED on L1
-      ['proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
+      // Show as waiting while generating or waiting for user signature (but NOT proof_submitted or proof_confirmed)
+      ['game_found', 'generating_proof', 'waiting_proof_signature'].includes(txStatus) ? 'waiting' :
+      // Completed after transaction is submitted AND confirmed on L1
+      ['proof_submitted', 'proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
        'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
-    // Wait for challenge period (7 days)
+    // Wait for challenge period (10 seconds)
     const waitChallengeStatus: StepStatus =
+      // Only waiting during proof_submitted and proof_confirmed (challenge period)
       ['proof_submitted', 'proof_confirmed'].includes(txStatus) ? 'waiting' :
+      // Completed once we move past proof_confirmed
       ['waiting_resolve_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
@@ -199,12 +201,13 @@ export function WithdrawalStepsModal({
     // Only active when challenge period is complete (countdown finished) AND proof is confirmed
     const isChallengePeriodComplete = countdown === null || countdown === 0;
     const resolveClaimsStatus: StepStatus =
+      // Active only when proof is confirmed AND challenge period is complete (and not yet moved to next step)
       (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ? 'active' :
-      // Show as waiting during challenge period or while waiting for signature
-      (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'waiting' :
-      // Show as waiting while user is signing or transaction is being processed
-      ['waiting_resolve_signature'].includes(txStatus) ? 'waiting' :
-      // Completed once resolve claims transaction is confirmed
+      // Waiting during challenge period
+      (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'pending' :
+      // Waiting while user is signing
+      txStatus === 'waiting_resolve_signature' ? 'waiting' :
+      // Completed once resolve claims transaction is confirmed (moved to resolving_game)
       ['resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
@@ -212,6 +215,7 @@ export function WithdrawalStepsModal({
     const resolveGameStatus: StepStatus =
       // Active when resolve claims is done and ready for resolve game
       txStatus === 'resolving_game' ? 'active' :
+      // Waiting is not needed here, user clicks button immediately
       // Completed after resolve game is confirmed
       ['game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
@@ -230,7 +234,7 @@ export function WithdrawalStepsModal({
         id: 1,
         title: `Start on Proteus`,
         description: transaction.token,
-        fee: '0.00000143 ETH',
+        fee: '0.00000143 IP',
         feeUSD: '$0.000562',
         status: step1Status,
         buttonText: 'Start',
@@ -248,7 +252,7 @@ export function WithdrawalStepsModal({
         id: 3,
         title: 'Prove on Poseidon',
         description: transaction.token,
-        fee: '0.0000005 ETH',
+        fee: '0.0000005 IP',
         feeUSD: '$0.001964',
         status: step2Status,
         buttonText: 'Prove',
@@ -266,7 +270,7 @@ export function WithdrawalStepsModal({
         id: 5,
         title: 'Resolve Claims on Poseidon',
         description: transaction.token,
-        fee: '0.0000005 ETH',
+        fee: '0.0000005 IP',
         feeUSD: '$0.001964',
         status: resolveClaimsStatus,
         buttonText: 'Resolve',
@@ -276,7 +280,7 @@ export function WithdrawalStepsModal({
         id: 6,
         title: 'Resolve Game on Poseidon',
         description: transaction.token,
-        fee: '0.0000005 ETH',
+        fee: '0.0000005 IP',
         feeUSD: '$0.001964',
         status: resolveGameStatus,
         buttonText: 'Resolve Game',
@@ -286,7 +290,7 @@ export function WithdrawalStepsModal({
         id: 7,
         title: `Get ${transaction.amount} ${transaction.token} on Poseidon`,
         description: transaction.token,
-        fee: '0.0000005 ETH',
+        fee: '0.0000005 IP',
         feeUSD: '$0.001964',
         status: finalizeStatus,
         buttonText: 'Get',
@@ -304,7 +308,7 @@ export function WithdrawalStepsModal({
     }
     if (step.status === 'active') {
       return (
-        <div className="h-4 w-4 rounded-full bg-white flex items-center justify-center">
+        <div className="h-4 w-4 rounded-full bg-gray-400 flex items-center justify-center">
           <Circle className="h-2 w-2 text-gray-900 fill-gray-900" />
         </div>
       );
@@ -313,10 +317,10 @@ export function WithdrawalStepsModal({
   };
 
   const getStepIconBg = (step: Step) => {
-    if (step.status === 'completed') return 'bg-gray-800';
-    if (step.status === 'active') return 'bg-gray-800';
-    if (step.status === 'waiting') return 'bg-gray-800';
-    return 'bg-gray-900/50';
+    if (step.status === 'completed') return 'bg-gray-950';
+    if (step.status === 'active') return 'bg-gray-950';
+    if (step.status === 'waiting') return 'bg-gray-950';
+    return 'bg-black';
   };
 
   return (
@@ -329,7 +333,7 @@ export function WithdrawalStepsModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
           />
 
           {/* Modal */}
@@ -337,21 +341,21 @@ export function WithdrawalStepsModal({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-gradient-to-b from-gray-950 to-gray-900 rounded-2xl shadow-2xl z-50 overflow-hidden border border-gray-800"
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-black rounded-2xl shadow-2xl z-50 overflow-hidden border border-gray-800"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2 border-b border-gray-800">
+            <div className="flex items-center justify-between p-4 pb-2 border-b border-gray-900 bg-gray-950">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-8 w-8 p-0 rounded-full bg-gray-800/50 hover:bg-gray-700/50"
+                className="h-8 w-8 p-0 rounded-full bg-gray-900 hover:bg-gray-800"
               >
                 <ArrowLeft className="h-4 w-4 text-white" />
               </Button>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">Ξ</span>
+                <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center">
+                  <span className="text-white font-bold text-xs">IP</span>
                 </div>
                 <div className="text-center">
                   <h2 className="text-base font-bold text-white leading-tight">
@@ -364,19 +368,19 @@ export function WithdrawalStepsModal({
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-8 w-8 p-0 rounded-full bg-gray-800/50 hover:bg-gray-700/50"
+                className="h-8 w-8 p-0 rounded-full bg-gray-900 hover:bg-gray-800"
               >
                 <X className="h-4 w-4 text-white" />
               </Button>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 px-4 py-2 bg-gray-900/50">
+            <div className="flex gap-2 px-4 py-2 bg-black">
               <button
                 onClick={() => setActiveTab('steps')}
                 className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   activeTab === 'steps'
-                    ? 'bg-white text-gray-900'
+                    ? 'bg-gray-800 text-white'
                     : 'bg-transparent text-gray-400 hover:text-gray-200'
                 }`}
               >
@@ -386,7 +390,7 @@ export function WithdrawalStepsModal({
                 onClick={() => setActiveTab('info')}
                 className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   activeTab === 'info'
-                    ? 'bg-white text-gray-900'
+                    ? 'bg-gray-800 text-white'
                     : 'bg-transparent text-gray-400 hover:text-gray-200'
                 }`}
               >
@@ -464,10 +468,10 @@ export function WithdrawalStepsModal({
                       <div
                         className={`flex items-center justify-between p-3 rounded-xl transition-all ${
                           step.status === 'active' || step.status === 'waiting'
-                            ? 'bg-gray-800 border border-gray-700'
+                            ? 'bg-gray-900 border border-gray-800'
                             : step.status === 'completed'
-                            ? 'bg-gray-800/50 border border-gray-700/50'
-                            : 'bg-gray-900/30 border border-gray-800/50'
+                            ? 'bg-gray-950 border border-gray-900'
+                            : 'bg-black border border-gray-900'
                         }`}
                       >
                         <div className="flex items-center flex-1">
@@ -485,7 +489,7 @@ export function WithdrawalStepsModal({
                               {step.title}
                             </p>
                             {step.isWaitStep && step.waitDuration && step.status === 'waiting' && (
-                              <p className="text-[10px] text-cyan-400 font-semibold animate-pulse">
+                              <p className="text-[10px] text-gray-400 font-semibold animate-pulse">
                                 ⏱️ {step.waitDuration}
                               </p>
                             )}
@@ -504,8 +508,8 @@ export function WithdrawalStepsModal({
                             disabled={step.status !== 'active'}
                             className={`rounded-full px-4 py-1 text-xs font-semibold transition-all ${
                               step.status === 'active'
-                                ? 'bg-white text-gray-900 hover:bg-gray-100'
-                                : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                                ? 'bg-gray-800 text-white hover:bg-gray-700'
+                                : 'bg-gray-900 text-gray-600 cursor-not-allowed'
                             }`}
                           >
                             {step.buttonText}
@@ -518,7 +522,7 @@ export function WithdrawalStepsModal({
                 </>
               ) : (
                 // Bridge Info Tab
-                <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
+                <div className="bg-black rounded-lg p-3 space-y-2 border border-gray-900">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400">From</span>
                     <span className="text-white font-medium">Proteus Devnet</span>
@@ -541,7 +545,7 @@ export function WithdrawalStepsModal({
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400">Countdown</span>
-                    <span className="text-cyan-400 font-medium">
+                    <span className="text-gray-300 font-medium">
                       {countdown !== null ? `${countdown}s` : 'Not active'}
                     </span>
                   </div>
@@ -558,7 +562,7 @@ export function WithdrawalStepsModal({
                         href={`https://devnet-proteus.psdnscan.io/tx/${transaction.l2TxHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] text-blue-400 hover:underline break-all"
+                        className="text-[10px] text-gray-300 hover:text-white hover:underline break-all"
                       >
                         {transaction.l2TxHash}
                       </a>
@@ -571,7 +575,7 @@ export function WithdrawalStepsModal({
                         href={`https://poseidon.storyscan.io/tx/${transaction.l1ProofTxHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] text-blue-400 hover:underline break-all"
+                        className="text-[10px] text-gray-300 hover:text-white hover:underline break-all"
                       >
                         {transaction.l1ProofTxHash}
                       </a>
