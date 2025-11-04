@@ -30,7 +30,6 @@ import {
   ZERO_AMOUNT,
   SWAP_ANIMATION_DURATION,
   EMPTY_EXTRA_DATA,
-  TEST_MODE,
   type BridgeOption,
   type Token,
   PSDN_L1_TOKEN,
@@ -64,7 +63,9 @@ import {
 import {
   TransactionStorage,
   type TransactionStatus,
+  type WithdrawalTransaction,
 } from "@/lib/transaction-tracker";
+import { isUserRejectedError, formatTransactionError, logTransactionError } from "@/lib/error-utils";
 
 
 export function BridgeInterface() {
@@ -243,15 +244,31 @@ export function BridgeInterface() {
       console.log('🎯 Resolve Game button is now active - waiting for user to click');
     }
     if (resolveClaimsError) {
-      console.error('❌ Resolve Claims Transaction Failed:', resolveClaimsError);
-      
-      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
-        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-        const tx = TransactionStorage.getAll().find(t => 
-          t.withdrawalDetails?.withdrawalHash === txId
-        );
-        if (tx) {
-          TransactionStorage.markError(tx.id, `Resolve claims transaction failed: ${resolveClaimsError.message}`);
+      if (!isUserRejectedError(resolveClaimsError)) {
+        logTransactionError('Resolve Claims Transaction Failed', resolveClaimsError);
+
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.markError(tx.id, `Resolve claims transaction failed: ${resolveClaimsError.message}`);
+          }
+        }
+      } else {
+        // User cancelled - reset status back to proof_confirmed so they can retry
+        console.log('ℹ️ User cancelled resolve claims transaction - resetting status');
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.update({ id: tx.id, status: 'proof_confirmed' });
+            // Also clear the processing flag
+            processingTxs.current.delete(`resolve_${tx.id}`);
+          }
         }
       }
     }
@@ -311,15 +328,31 @@ export function BridgeInterface() {
       console.log('   User must click the "Get" button in the withdrawal modal to finalize and receive tokens');
     }
     if (resolveGameError) {
-      console.error('❌ Resolve Game Transaction Failed:', resolveGameError);
-      
-      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
-        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-        const tx = TransactionStorage.getAll().find(t => 
-          t.withdrawalDetails?.withdrawalHash === txId
-        );
-        if (tx) {
-          TransactionStorage.markError(tx.id, `Resolve game transaction failed: ${resolveGameError.message}`);
+      if (!isUserRejectedError(resolveGameError)) {
+        logTransactionError('Resolve Game Transaction Failed', resolveGameError);
+
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.markError(tx.id, `Resolve game transaction failed: ${resolveGameError.message}`);
+          }
+        }
+      } else {
+        // User cancelled - reset status back to resolving_game so they can retry
+        console.log('ℹ️ User cancelled resolve game transaction - resetting status');
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
+            // Also clear the processing flag
+            processingTxs.current.delete(`resolve_game_final_${tx.id}`);
+          }
         }
       }
     }
@@ -389,15 +422,31 @@ export function BridgeInterface() {
       console.log(`✅ Transaction ${tx.id} marked as completed`);
     }
     if (finalizeError) {
-      console.error('❌ Finalize Withdrawal Transaction Failed:', finalizeError);
-      
-      if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
-        const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-        const tx = TransactionStorage.getAll().find(t => 
-          t.withdrawalDetails?.withdrawalHash === txId
-        );
-        if (tx) {
-          TransactionStorage.markError(tx.id, `Finalize withdrawal transaction failed: ${finalizeError.message}`);
+      if (!isUserRejectedError(finalizeError)) {
+        logTransactionError('Finalize Withdrawal Transaction Failed', finalizeError);
+
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.markError(tx.id, `Finalize withdrawal transaction failed: ${finalizeError.message}`);
+          }
+        }
+      } else {
+        // User cancelled - reset status back to game_resolved so they can retry
+        console.log('ℹ️ User cancelled finalize transaction - resetting status');
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+            // Also clear the processing flag
+            processingTxs.current.delete(`finalize_${tx.id}`);
+          }
         }
       }
     }
@@ -407,39 +456,82 @@ export function BridgeInterface() {
   useEffect(() => {
     if (proofTxHash) {
       console.log(`\n✅ Proof Transaction Submitted: ${proofTxHash}`);
-      
+
       // Update status to proof_submitted when transaction hash is available (user confirmed in wallet)
+      // Try to find the transaction using either proofSubmissionData or activeWithdrawalTxId
+      let tx = null;
+      let foundMethod = '';
+
       if (proofSubmissionData) {
         const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-        const tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
-        
-        if (tx && tx.status === 'waiting_proof_signature') {
-          TransactionStorage.update({ 
-            id: tx.id, 
-            status: 'proof_submitted',
-            l1ProofTxHash: proofTxHash 
-          });
-          console.log('   Status updated: waiting_proof_signature → proof_submitted');
-        }
+        tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
+        if (tx) foundMethod = 'proofSubmissionData';
+        console.log(`   Looking for transaction with withdrawalHash: ${txId}`);
+      }
+
+      if (!tx && activeWithdrawalTxId) {
+        // Fallback to activeWithdrawalTxId if proofSubmissionData didn't find it
+        tx = TransactionStorage.getById(activeWithdrawalTxId);
+        if (tx) foundMethod = 'activeWithdrawalTxId';
+        console.log(`   Fallback: Looking for transaction with id: ${activeWithdrawalTxId}`);
+      }
+
+      if (tx && tx.status === 'waiting_proof_signature') {
+        TransactionStorage.update({
+          id: tx.id,
+          status: 'proof_submitted',
+          l1ProofTxHash: proofTxHash
+        });
+        console.log(`   ✅ Status updated: waiting_proof_signature → proof_submitted (found via ${foundMethod})`);
+      } else if (tx) {
+        console.log(`   ⚠️ Transaction found via ${foundMethod} but status is ${tx.status}, not updating`);
+      } else {
+        console.log('   ❌ Transaction not found to update status');
+        console.log('   proofSubmissionData:', proofSubmissionData ? 'present' : 'null');
+        console.log('   activeWithdrawalTxId:', activeWithdrawalTxId || 'null');
       }
     }
     if (isProofConfirming) {
       console.log('\n⏳ Waiting for proof confirmation...');
     }
-    if (isProofConfirmed && proofSubmissionData) {
-      // Get the transaction ID from withdrawal hash
-      const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
-      
+    if (isProofConfirmed) {
+      console.log('\n🔔 Proof transaction confirmed on-chain!');
+      // Try to find the transaction using either proofSubmissionData or activeWithdrawalTxId
+      let tx = null;
+      let txId: string | null = null;
+      let foundMethod = '';
+
+      if (proofSubmissionData) {
+        txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+        tx = TransactionStorage.getAll().find(t =>
+          t.withdrawalDetails?.withdrawalHash === txId
+        );
+        if (tx) foundMethod = 'proofSubmissionData';
+        console.log(`   Looking for transaction with withdrawalHash: ${txId}`);
+      }
+
+      if (!tx && activeWithdrawalTxId) {
+        // Fallback to activeWithdrawalTxId if proofSubmissionData didn't find it
+        txId = activeWithdrawalTxId;
+        tx = TransactionStorage.getById(activeWithdrawalTxId);
+        if (tx) foundMethod = 'activeWithdrawalTxId';
+        console.log(`   Fallback: Looking for transaction with id: ${activeWithdrawalTxId}`);
+      }
+
+      if (!txId || !tx) {
+        console.log('   ❌ No transaction found for proof confirmation');
+        console.log('   proofSubmissionData:', proofSubmissionData ? 'present' : 'null');
+        console.log('   activeWithdrawalTxId:', activeWithdrawalTxId || 'null');
+        return;
+      }
+
+      console.log(`   ✅ Found transaction via ${foundMethod}, current status: ${tx.status}`);
+
       // Check if we're already processing this proof confirmation
       if (processingTxs.current.has(`proof_${txId}`)) {
         console.log(`🔄 Proof for ${txId} is already being resolved, skipping duplicate`);
         return;
       }
-      
-      // Find the transaction
-      const tx = TransactionStorage.getAll().find(t => 
-        t.withdrawalDetails?.withdrawalHash === txId
-      );
       
       // GUARD: Don't process if transaction is completed or in error state
       if (!tx) {
@@ -453,7 +545,8 @@ export function BridgeInterface() {
       }
       
       // Check if already past proof_confirmed status
-      if (tx.status !== 'proof_submitted' && tx.status !== 'proof_confirmed') {
+      // Allow transition from proof_generated, waiting_proof_signature, or proof_submitted
+      if (!['proof_generated', 'waiting_proof_signature', 'proof_submitted', 'proof_confirmed'].includes(tx.status)) {
         console.log(`ℹ️ Transaction ${tx.id} already past proof confirmation (status: ${tx.status}), skipping Step 5`);
         return;
       }
@@ -476,8 +569,24 @@ export function BridgeInterface() {
       }
     }
     if (proofError) {
-      console.error('❌ Step 4 FAILED: Proof submission transaction failed:', proofError);
-      console.error('   Cannot proceed to Steps 5 & 6');
+      if (!isUserRejectedError(proofError)) {
+        logTransactionError('Step 4 FAILED: Proof submission transaction failed', proofError);
+        console.log('   Cannot proceed to Steps 5 & 6');
+      } else {
+        // User cancelled - reset status back to proof_generated so they can retry
+        console.log('ℹ️ User cancelled proof submission - resetting status');
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.update({ id: tx.id, status: 'proof_generated' });
+            // Also clear the processing flag
+            processingTxs.current.delete(`prove_${tx.id}`);
+          }
+        }
+      }
     }
   }, [proofTxHash, isProofConfirming, isProofConfirmed, proofError, proofSubmissionData, resolveGame]);
 
@@ -596,8 +705,10 @@ export function BridgeInterface() {
             console.log(`   Game L2 Block: ${disputeGame.gameL2Block}`);
             console.log(`   Root Claim: ${disputeGame.rootClaim}`);
           } catch (error) {
-            console.error('❌ Step 2 FAILED - Cannot proceed to Step 3:', error);
-            TransactionStorage.markError(txHash, `Step 2 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            if (!isUserRejectedError(error)) {
+              logTransactionError('Step 2 FAILED - Cannot proceed to Step 3', error);
+              TransactionStorage.markError(txHash, `Step 2 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
             throw new Error(`Step 2 (Wait for dispute game) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
             
@@ -614,8 +725,10 @@ export function BridgeInterface() {
             console.log(`   Storage Slot: ${proofData.storageSlot}`);
             console.log(`   Output Root Proof:`, proofData.outputRootProof);
           } catch (error) {
-            console.error('❌ Step 3 FAILED - Cannot proceed to Step 4:', error);
-            TransactionStorage.markError(txHash, `Step 3 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            if (!isUserRejectedError(error)) {
+              logTransactionError('Step 3 FAILED - Cannot proceed to Step 4', error);
+              TransactionStorage.markError(txHash, `Step 3 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
             throw new Error(`Step 3 (Generate proof) failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
               
@@ -634,7 +747,9 @@ export function BridgeInterface() {
         }
       
     } catch (error) {
-      console.error('❌ Failed to get receipt details:', error);
+      if (!isUserRejectedError(error)) {
+        logTransactionError('Failed to get receipt details', error);
+      }
     }
   }, [waitForDisputeGame, generateProof, submitProof]);
   
@@ -945,22 +1060,47 @@ export function BridgeInterface() {
       const existingTx = TransactionStorage.getById(l2TxData);
       
       if (!existingTx) {
-        // Create transaction record in localStorage only if it doesn't exist
-        TransactionStorage.create({
-          id: l2TxData,
-          l2TxHash: l2TxData,
-          status: 'pending',
-          type: 'L2_TO_L1',
-          token: 'PSDN',
-          amount: fromAmount,
-          fromAddress: address,
-        });
+        // Look for temporary transaction and update it
+        const allTxs = TransactionStorage.getAll();
+        const tempTx = allTxs.find(tx => tx.id.startsWith('temp-') && !tx.l2TxHash && tx.type === 'L2_TO_L1' && tx.token === 'PSDN');
         
-        console.log(`📝 Created L2→L1 PSDN transaction record: ${l2TxData}`);
-        
-        // Open withdrawal modal for this transaction
-        setActiveWithdrawalTxId(l2TxData);
-        setIsWithdrawalModalOpen(true);
+        if (tempTx) {
+          // Delete temporary transaction
+          TransactionStorage.delete(tempTx.id);
+          
+          // Create new transaction with real hash
+          TransactionStorage.create({
+            id: l2TxData,
+            l2TxHash: l2TxData,
+            status: 'pending',
+            type: 'L2_TO_L1',
+            token: 'PSDN',
+            amount: fromAmount,
+            fromAddress: address,
+          });
+          
+          console.log(`📝 Updated temp transaction to real L2→L1 PSDN transaction: ${l2TxData}`);
+          
+          // Update active withdrawal ID to the real transaction hash
+          setActiveWithdrawalTxId(l2TxData);
+        } else {
+          // Create transaction record in localStorage only if it doesn't exist
+          TransactionStorage.create({
+            id: l2TxData,
+            l2TxHash: l2TxData,
+            status: 'pending',
+            type: 'L2_TO_L1',
+            token: 'PSDN',
+            amount: fromAmount,
+            fromAddress: address,
+          });
+          
+          console.log(`📝 Created L2→L1 PSDN transaction record: ${l2TxData}`);
+          
+          // Open withdrawal modal for this transaction
+          setActiveWithdrawalTxId(l2TxData);
+          setIsWithdrawalModalOpen(true);
+        }
       } else {
         console.log(`ℹ️ Transaction ${l2TxData} already exists, skipping creation`);
       }
@@ -976,22 +1116,47 @@ export function BridgeInterface() {
       const existingTx = TransactionStorage.getById(l2EthTxData);
       
       if (!existingTx) {
-        // Create transaction record in localStorage only if it doesn't exist
-        TransactionStorage.create({
-          id: l2EthTxData,
-          l2TxHash: l2EthTxData,
-          status: 'pending',
-          type: 'L2_TO_L1',
-          token: 'ETH',
-          amount: fromAmount,
-          fromAddress: address,
-        });
+        // Look for temporary transaction and update it
+        const allTxs = TransactionStorage.getAll();
+        const tempTx = allTxs.find(tx => tx.id.startsWith('temp-') && !tx.l2TxHash && tx.type === 'L2_TO_L1' && tx.token === 'ETH');
         
-        console.log(`📝 Created L2→L1 ETH transaction record: ${l2EthTxData}`);
-        
-        // Open withdrawal modal for this transaction
-        setActiveWithdrawalTxId(l2EthTxData);
-        setIsWithdrawalModalOpen(true);
+        if (tempTx) {
+          // Delete temporary transaction
+          TransactionStorage.delete(tempTx.id);
+          
+          // Create new transaction with real hash
+          TransactionStorage.create({
+            id: l2EthTxData,
+            l2TxHash: l2EthTxData,
+            status: 'pending',
+            type: 'L2_TO_L1',
+            token: 'ETH',
+            amount: fromAmount,
+            fromAddress: address,
+          });
+          
+          console.log(`📝 Updated temp transaction to real L2→L1 ETH transaction: ${l2EthTxData}`);
+          
+          // Update active withdrawal ID to the real transaction hash
+          setActiveWithdrawalTxId(l2EthTxData);
+        } else {
+          // Create transaction record in localStorage only if it doesn't exist
+          TransactionStorage.create({
+            id: l2EthTxData,
+            l2TxHash: l2EthTxData,
+            status: 'pending',
+            type: 'L2_TO_L1',
+            token: 'ETH',
+            amount: fromAmount,
+            fromAddress: address,
+          });
+          
+          console.log(`📝 Created L2→L1 ETH transaction record: ${l2EthTxData}`);
+          
+          // Open withdrawal modal for this transaction
+          setActiveWithdrawalTxId(l2EthTxData);
+          setIsWithdrawalModalOpen(true);
+        }
       } else {
         console.log(`ℹ️ Transaction ${l2EthTxData} already exists, skipping creation`);
       }
@@ -1078,6 +1243,14 @@ export function BridgeInterface() {
     setFromAmount(formatAmountOnBlur(fromAmount));
   }, [fromAmount]);
 
+  const handleMaxClick = useCallback(() => {
+    const maxBalance = getTokenBalance(fromToken, psdnBalance, psdnL2Balance, ethBalance, ethL2Balance);
+    if (maxBalance) {
+      setFromAmount(maxBalance);
+      setToAmount(maxBalance);
+    }
+  }, [fromToken, psdnBalance, psdnL2Balance, ethBalance, ethL2Balance]);
+
   const handleToAmountBlur = useCallback(() => {
     setToAmount(formatAmountOnBlur(toAmount));
   }, [toAmount]);
@@ -1086,7 +1259,7 @@ export function BridgeInterface() {
     try {
       await switchChain({ chainId: requiredNetwork.id });
     } catch (error) {
-      console.error('Failed to switch network:', error);
+      logTransactionError('Failed to switch network', error);
     }
   }, [switchChain, requiredNetwork.id]);
 
@@ -1130,36 +1303,51 @@ export function BridgeInterface() {
   // Handlers for withdrawal modal actions
   const handleProveWithdrawal = useCallback(() => {
     if (!activeWithdrawalTxId) return;
-    
+
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
     if (!tx || !tx.withdrawalDetails || !tx.disputeGame || !tx.proofData) {
       console.error('Cannot prove: missing withdrawal details');
       return;
     }
-    
+
     // Guard: Only allow if proof is ready
     if (tx.status !== 'proof_generated') {
       console.log(`⚠️ Cannot prove: transaction status is ${tx.status}, expected 'proof_generated'`);
       return;
     }
-    
+
     // Guard: Prevent duplicate submissions
     if (processingTxs.current.has(`prove_${tx.id}`)) {
       console.log('⚠️ Proof submission already in progress, ignoring duplicate click');
       return;
     }
-    
+
     processingTxs.current.add(`prove_${tx.id}`);
-    
+
+    // Set proof submission data so the proof confirmation effect can find the transaction
+    setProofSubmissionData({
+      withdrawalDetails: tx.withdrawalDetails,
+      disputeGame: tx.disputeGame,
+      proofData: tx.proofData
+    });
+
     // Update status to waiting for signature
     TransactionStorage.update({ id: tx.id, status: 'waiting_proof_signature' });
     console.log('\n📤 User clicked "Prove" - Submitting proof to L1...');
-    
+
     // Submit proof - this will prompt user's wallet
     submitProof(tx.withdrawalDetails, tx.disputeGame, tx.proofData)
       .catch((error) => {
-        console.error('❌ Proof submission failed:', error);
-        TransactionStorage.markError(tx.id, `Proof submission failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        if (!isUserRejectedError(error)) {
+          logTransactionError('Proof submission failed', error);
+          TransactionStorage.markError(tx.id, `Proof submission failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } else {
+          // User cancelled - reset status back to proof_generated so they can retry
+          console.log('ℹ️ User cancelled proof submission - resetting status');
+          TransactionStorage.update({ id: tx.id, status: 'proof_generated' });
+        }
+        // Clear proof submission data on error
+        setProofSubmissionData(null);
       })
       .finally(() => {
         processingTxs.current.delete(`prove_${tx.id}`);
@@ -1189,18 +1377,20 @@ export function BridgeInterface() {
     
     processingTxs.current.add(`resolve_${tx.id}`);
     
-    // Check if challenge period has elapsed (only if not in test mode)
-    if (!TEST_MODE) {
-      console.log('\n⏳ User clicked "Resolve" - Challenge period verified by countdown');
-    }
-    
+    console.log('\n⏳ User clicked "Resolve" - Challenge period verified by countdown');
     console.log('\n🎯 User clicked "Resolve" (Step 5) - Starting resolve claims...');
     
     // Call resolveGame - this will send resolve claims transaction
     resolveGame(tx.disputeGame.gameAddress, tx.id)
       .catch((error) => {
-        console.error('❌ Resolve claims failed:', error);
-        TransactionStorage.markError(tx.id, `Resolve claims failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        if (!isUserRejectedError(error)) {
+          logTransactionError('Resolve claims failed', error);
+          TransactionStorage.markError(tx.id, `Resolve claims failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } else {
+          // User cancelled - reset status back to proof_confirmed so they can retry
+          console.log('ℹ️ User cancelled resolve claims - resetting status');
+          TransactionStorage.update({ id: tx.id, status: 'proof_confirmed' });
+        }
       })
       .finally(() => {
         processingTxs.current.delete(`resolve_${tx.id}`);
@@ -1256,6 +1446,24 @@ export function BridgeInterface() {
     }, 1000);
   }, [activeWithdrawalTxId, proofSubmissionData, writeResolveGameContract]);
   
+  const handleCloseWithdrawalModal = useCallback(() => {
+    // Clean up temporary transaction if it exists
+    if (activeWithdrawalTxId && activeWithdrawalTxId.startsWith('temp-')) {
+      TransactionStorage.delete(activeWithdrawalTxId);
+      console.log('🧹 Cleaned up temporary transaction on modal close');
+    }
+    setIsWithdrawalModalOpen(false);
+    setActiveWithdrawalTxId(null);
+  }, [activeWithdrawalTxId]);
+
+  // Handler for when a transaction is selected from the pending transactions modal
+  const handleSelectTransaction = useCallback((transaction: WithdrawalTransaction) => {
+    if (transaction.type === 'L2_TO_L1') {
+      setActiveWithdrawalTxId(transaction.id);
+      setIsWithdrawalModalOpen(true);
+    }
+  }, []);
+
   const handleFinalizeWithdrawal = useCallback(() => {
     if (!activeWithdrawalTxId) return;
     
@@ -1284,52 +1492,48 @@ export function BridgeInterface() {
     // Call finalizeWithdrawal - this will prompt user's wallet
     finalizeWithdrawal(tx.withdrawalDetails, tx.id)
       .catch((error) => {
-        console.error('❌ Finalization failed:', error);
-        TransactionStorage.markError(tx.id, `Finalization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        if (!isUserRejectedError(error)) {
+          logTransactionError('Finalization failed', error);
+          TransactionStorage.markError(tx.id, `Finalization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } else {
+          // User cancelled - reset status back to game_resolved so they can retry
+          console.log('ℹ️ User cancelled finalization - resetting status');
+          TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+        }
       })
       .finally(() => {
         processingTxs.current.delete(`finalize_${tx.id}`);
       });
   }, [activeWithdrawalTxId, finalizeWithdrawal]);
 
-  // Test mode: Create a mock withdrawal transaction
-  const handleTestModeWithdrawal = useCallback(() => {
-    if (!address || !TEST_MODE) return;
-    
-    // Create a mock L2 transaction ID
-    const mockTxHash = `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
-    
-    // Create transaction record
-    TransactionStorage.create({
-      id: mockTxHash,
-      l2TxHash: mockTxHash,
-      status: 'pending',
-      type: 'L2_TO_L1',
-      token: fromToken.symbol,
-      amount: fromAmount || '0.3',
-      fromAddress: address,
-    });
-    
-    console.log(`📝 Created test L2→L1 transaction: ${mockTxHash}`);
-    
-    // Open withdrawal modal
-    setActiveWithdrawalTxId(mockTxHash);
-    setIsWithdrawalModalOpen(true);
-  }, [address, fromToken.symbol, fromAmount]);
-
   const handleTransact = useCallback(async () => {
     if (!address || !fromAmount || !isValidAmount(fromAmount)) {
       return;
     }
 
-    // If in test mode and doing L2->L1, create mock transaction
-    if (TEST_MODE && isL2ToL1) {
-      handleTestModeWithdrawal();
-      return;
-    }
-
     try {
       const amount = parseUnits(fromAmount, TOKEN_DECIMALS);
+
+      // For L2 to L1 flows, create a temporary transaction and show modal first
+      if (isL2ToL1) {
+        const tempTxId = `temp-${Date.now()}`;
+        TransactionStorage.create({
+          id: tempTxId,
+          l2TxHash: '',
+          status: 'pending',
+          type: 'L2_TO_L1',
+          token: fromToken.symbol,
+          amount: fromAmount,
+          fromAddress: address,
+        });
+        
+        // Open modal immediately
+        setActiveWithdrawalTxId(tempTxId);
+        setIsWithdrawalModalOpen(true);
+        
+        // Small delay to ensure modal is visible before transaction prompt
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       if (fromToken.symbol === 'ETH') {
         // For ETH, handle both L1->L2 and L2->L1
@@ -1408,9 +1612,24 @@ export function BridgeInterface() {
       refetchEthL2Balance();
       refetchAllowance();
     } catch (error) {
-      console.error("Transaction failed:", error);
+      // Only log error if it's not a user cancellation
+      if (!isUserRejectedError(error)) {
+        logTransactionError("Transaction failed", error);
+      }
+
+      // Clean up temporary transaction if user cancelled for L2 to L1
+      if (isL2ToL1 && activeWithdrawalTxId && activeWithdrawalTxId.startsWith('temp-')) {
+        TransactionStorage.delete(activeWithdrawalTxId);
+        setIsWithdrawalModalOpen(false);
+        setActiveWithdrawalTxId(null);
+        if (isUserRejectedError(error)) {
+          console.log('ℹ️ User cancelled transaction - cleaned up temporary data');
+        } else {
+          console.log('🧹 Cleaned up temporary transaction after error');
+        }
+      }
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol, handleTestModeWithdrawal]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol, activeWithdrawalTxId]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -1425,10 +1644,12 @@ export function BridgeInterface() {
     [isApprovePending, isBridgeEthPending, isDepositErc20Pending, isL2BridgeErc20Pending, isL2BridgeEthPending]
   );
 
-  const hasError = useMemo(() => 
-    approveError || bridgeEthError || depositErc20Error || l2BridgeErc20Error || l2BridgeEthError,
-    [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error, l2BridgeEthError]
-  );
+  // Filter out user-cancelled transactions from errors
+  const hasError = useMemo(() => {
+    const errors = [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error, l2BridgeEthError];
+    // Find the first non-cancelled error
+    return errors.find(error => error && !isUserRejectedError(error)) || null;
+  }, [approveError, bridgeEthError, depositErc20Error, l2BridgeErc20Error, l2BridgeEthError]);
 
   // Check if approval is needed for PSDN transactions
   const needsApproval = useMemo(() => {
@@ -1476,11 +1697,11 @@ export function BridgeInterface() {
 
   return (
     <>
-      <PendingTransactionsTab />
+      <PendingTransactionsTab onSelectTransaction={handleSelectTransaction} />
       {activeWithdrawalTx && (
         <WithdrawalStepsModal
           isOpen={isWithdrawalModalOpen}
-          onClose={() => setIsWithdrawalModalOpen(false)}
+          onClose={handleCloseWithdrawalModal}
           transaction={activeWithdrawalTx}
           onProve={handleProveWithdrawal}
           onResolve={handleResolveGame}
@@ -1504,8 +1725,14 @@ export function BridgeInterface() {
         <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3 relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                {fromToken.logo.startsWith('http') ? (
+              <div className={`w-8 h-8 rounded-full ${fromToken.color} flex items-center justify-center`}>
+                {fromToken.logo === 'psdn-svg' ? (
+                  <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
+                    <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                    <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                    <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                  </svg>
+                ) : fromToken.logo.startsWith('http') ? (
                   <Image 
                     src={fromToken.logo} 
                     alt={fromToken.symbol}
@@ -1554,7 +1781,15 @@ export function BridgeInterface() {
               className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
               disabled={false}
             />
-            <div className="text-muted-foreground text-sm">Amount to bridge</div>
+            <div className="flex items-center justify-between">
+              <div className="text-muted-foreground text-sm">Amount to bridge</div>
+              <button
+                onClick={handleMaxClick}
+                className="px-2.5 py-1 text-xs font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200"
+              >
+                MAX
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1572,8 +1807,14 @@ export function BridgeInterface() {
         {/* To Token Card */}
         <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3 relative z-10">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
-              {toToken.logo.startsWith('http') ? (
+            <div className={`w-8 h-8 rounded-full ${toToken.color} flex items-center justify-center`}>
+              {toToken.logo === 'psdn-svg' ? (
+                <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
+                  <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                  <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                  <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                </svg>
+              ) : toToken.logo.startsWith('http') ? (
                 <Image 
                   src={toToken.logo} 
                   alt={toToken.symbol}
@@ -1621,37 +1862,31 @@ export function BridgeInterface() {
         {/* Action Button */}
         <div className="relative z-10">
         {!isOnCorrectNetwork ? (
-          <Button
-            className="w-full mt-6"
-            variant="outline"
+          <button
             onClick={handleSwitchNetwork}
             disabled={isSwitchingChain}
+            className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSwitchingChain ? "Switching..." : `Switch to ${requiredNetwork.name}`}
-          </Button>
+          </button>
         ) : (
-        <Button
-          className="w-full mt-6"
-          variant="outline"
+        <button
           onClick={handleTransact}
           disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
+          className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isTransactionPending ? "Processing..." : (
-            TEST_MODE && isL2ToL1 ? (
-              <span className="flex items-center gap-2">
-                🧪 Test Withdrawal (No Gas Required)
-              </span>
-            ) : needsApproval ? "Approve PSDN" : "Transact"
+            needsApproval ? "Approve PSDN" : "Transact"
           )}
-        </Button>
+        </button>
         )}
         </div>
 
-        {/* Error Display */}
-        {hasError && (
+        {/* Error Display - Only show non-cancelled errors */}
+        {hasError && formatTransactionError(hasError) && (
           <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg relative z-10">
             <p className="text-destructive text-sm font-medium">
-              Error: {hasError?.message}
+              Error: {formatTransactionError(hasError)}
             </p>
           </div>
         )}

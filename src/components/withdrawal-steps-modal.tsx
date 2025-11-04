@@ -2,11 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ArrowLeft, Clock, Circle, CheckCircle2, FlaskConical } from "lucide-react";
+import { Clock, Circle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type WithdrawalTransaction, TransactionStorage } from "@/lib/transaction-tracker";
-import { TEST_MODE } from "@/lib/constants";
-import Image from "next/image";
 
 interface WithdrawalStepsModalProps {
   isOpen: boolean;
@@ -44,119 +42,80 @@ export function WithdrawalStepsModal({
 }: WithdrawalStepsModalProps) {
   const [activeTab, setActiveTab] = useState<'steps' | 'info'>('steps');
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [finalizeCountdown, setFinalizeCountdown] = useState<number | null>(null);
 
   // Monitor transaction status for countdown timer
   useEffect(() => {
-    console.log('🕐 Countdown effect triggered. Status:', transaction.status, 'TEST_MODE:', TEST_MODE);
-    
-    // Start countdown when proof is submitted OR confirmed (challenge period starts)
-    if (['proof_submitted', 'proof_confirmed'].includes(transaction.status) && !TEST_MODE) {
-      console.log('✅ Starting countdown from 10 seconds');
+    console.log('🕐 Countdown effect triggered. Status:', transaction.status, 'Current countdown:', countdown);
+
+    // Start countdown only when proof is confirmed (not when submitted)
+    if (transaction.status === 'proof_confirmed' && countdown === null) {
+      console.log('✅ Starting countdown from 10 seconds (proof confirmed)');
       // Start countdown from 10 seconds
       setCountdown(10);
-      
+    } else if (!['proof_confirmed', 'proof_submitted'].includes(transaction.status)) {
+      // Reset countdown if we're not in proof submitted or confirmed states
+      setCountdown(null);
+    }
+  }, [transaction.status]); // Remove countdown from deps to prevent re-runs
+
+  // Separate effect for countdown timer
+  useEffect(() => {
+    if (countdown !== null && countdown > 0) {
       const timer = setInterval(() => {
         setCountdown((prev) => {
-          if (prev === null || prev <= 1) {
+          if (prev === null || prev <= 0) {
             console.log('⏰ Countdown complete!');
-            return null;
+            return 0;
           }
-          console.log(`⏱️ Countdown: ${prev - 1}s remaining`);
-          return prev - 1;
+          const nextValue = prev - 1;
+          console.log(`⏱️ Countdown: ${nextValue}s remaining`);
+          return nextValue;
         });
       }, 1000);
-      
+
       return () => {
         console.log('🧹 Cleaning up countdown timer');
         clearInterval(timer);
       };
-    } else {
-      setCountdown(null);
     }
-  }, [transaction.status]);
+  }, [countdown]);
 
-  // Test mode handlers - manually advance through steps
-  const handleTestModeAdvance = (targetStatus: string) => {
-    if (!TEST_MODE) return;
-    
-    // Mock withdrawal details for test mode
-    const mockWithdrawalDetails = {
-      nonce: "1",
-      sender: transaction.fromAddress,
-      target: "0x0000000000000000000000000000000000000000",
-      value: "1000000000000000000",
-      gasLimit: "200000",
-      data: "0x",
-      withdrawalHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-    };
+  // Monitor for finalization countdown
+  useEffect(() => {
+    console.log('🕐 Finalization countdown effect. Status:', transaction.status, 'Current countdown:', finalizeCountdown);
 
-    const mockDisputeGame = {
-      gameIndex: 1,
-      gameAddress: `0x${Math.random().toString(16).slice(2).padEnd(40, '0')}`,
-      gameType: 0,
-      gameL2Block: 1000000,
-      rootClaim: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-      timestamp: Date.now(),
-    };
-
-    const mockProofData = {
-      withdrawalProof: ["0x123", "0x456"],
-      outputRootProof: {
-        version: "0x0",
-        stateRoot: "0x" + "0".repeat(64),
-        messagePasserStorageRoot: "0x" + "0".repeat(64),
-        latestBlockhash: "0x" + "0".repeat(64),
-      },
-      storageSlot: "0x" + "0".repeat(64),
-    };
-
-    switch (targetStatus) {
-      case 'l2_confirmed':
-        TransactionStorage.update({
-          id: transaction.id,
-          status: 'l2_confirmed',
-          withdrawalDetails: mockWithdrawalDetails,
-          l2BlockNumber: 1000000,
-        });
-        break;
-      case 'game_found':
-        TransactionStorage.update({
-          id: transaction.id,
-          status: 'game_found',
-          disputeGame: mockDisputeGame,
-        });
-        break;
-      case 'proof_generated':
-        TransactionStorage.update({
-          id: transaction.id,
-          status: 'proof_generated',
-          proofData: mockProofData,
-        });
-        break;
-      case 'proof_confirmed':
-        TransactionStorage.update({
-          id: transaction.id,
-          status: 'proof_confirmed',
-          l1ProofTxHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-        });
-        break;
-      case 'game_resolved':
-        TransactionStorage.update({
-          id: transaction.id,
-          status: 'game_resolved',
-          l1ResolveGameTxHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-        });
-        break;
-      case 'completed':
-        TransactionStorage.update({
-          id: transaction.id,
-          status: 'completed',
-          l1FinalizeTxHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-          completedAt: Date.now(),
-        });
-        break;
+    // Start countdown when game is resolved
+    if (transaction.status === 'game_resolved' && finalizeCountdown === null) {
+      console.log('✅ Starting finalization countdown from 10 seconds');
+      setFinalizeCountdown(10);
+    } else if (transaction.status !== 'game_resolved') {
+      // Reset countdown if we're not in game_resolved state
+      setFinalizeCountdown(null);
     }
-  };
+  }, [transaction.status]); // Remove finalizeCountdown from deps
+
+  // Separate effect for finalization timer
+  useEffect(() => {
+    if (finalizeCountdown !== null && finalizeCountdown > 0) {
+      const timer = setInterval(() => {
+        setFinalizeCountdown((prev) => {
+          if (prev === null || prev <= 0) {
+            console.log('⏰ Finalization countdown complete!');
+            return 0;
+          }
+          const nextValue = prev - 1;
+          console.log(`⏱️ Finalization countdown: ${nextValue}s remaining`);
+          return nextValue;
+        });
+      }, 1000);
+
+      return () => {
+        console.log('🧹 Cleaning up finalization countdown timer');
+        clearInterval(timer);
+      };
+    }
+  }, [finalizeCountdown]);
 
   // Determine step statuses based on transaction status
   const steps: Step[] = useMemo(() => {
@@ -190,21 +149,22 @@ export function WithdrawalStepsModal({
         ? 'completed' : 'pending';
 
     // Wait for challenge period (10 seconds)
+    const isChallengePeriodComplete = countdown === 0 || (countdown === null && txStatus !== 'proof_confirmed');
     const waitChallengeStatus: StepStatus =
-      // Only waiting during proof_submitted and proof_confirmed (challenge period)
-      ['proof_submitted', 'proof_confirmed'].includes(txStatus) ? 'waiting' :
-      // Completed once we move past proof_confirmed
+      // Waiting during proof_submitted
+      txStatus === 'proof_submitted' ? 'waiting' :
+      // Waiting during proof_confirmed but only while countdown is running
+      (txStatus === 'proof_confirmed' && countdown !== null && countdown > 0) ? 'waiting' :
+      // Completed when countdown is done OR we've moved to next steps
+      (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ||
       ['waiting_resolve_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Step 3: Resolve Claims on L1
     // Only active when challenge period is complete (countdown finished) AND proof is confirmed
-    const isChallengePeriodComplete = countdown === null || countdown === 0;
     const resolveClaimsStatus: StepStatus =
       // Active only when proof is confirmed AND challenge period is complete (and not yet moved to next step)
-      (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ? 'active' :
-      // Waiting during challenge period
-      (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'pending' :
+      (txStatus === 'proof_confirmed' && isChallengePeriodComplete && countdown === 0) ? 'active' :
       // Waiting while user is signing
       txStatus === 'waiting_resolve_signature' ? 'waiting' :
       // Completed once resolve claims transaction is confirmed (moved to resolving_game)
@@ -221,10 +181,13 @@ export function WithdrawalStepsModal({
         ? 'completed' : 'pending';
 
     // Step 5: Finalize withdrawal on L1
-    // Only enable finalize button after challenge period is complete
+    // Only enable finalize button after the 10-second finalization period
+    const isFinalizeReady = finalizeCountdown === 0 || (finalizeCountdown === null && txStatus !== 'game_resolved');
     const finalizeStatus: StepStatus =
-      // Only active when game is fully resolved (this happens after resolve game is confirmed)
-      txStatus === 'game_resolved' ? 'active' :
+      // Only active when game is resolved AND finalization countdown is complete
+      (txStatus === 'game_resolved' && isFinalizeReady) ? 'active' :
+      // Waiting during the finalization countdown
+      (txStatus === 'game_resolved' && !isFinalizeReady) ? 'waiting' :
       // Show as waiting while user is signing or transaction is confirming
       ['waiting_finalize_signature', 'finalizing'].includes(txStatus) ? 'waiting' :
       txStatus === 'completed' ? 'completed' : 'pending';
@@ -288,16 +251,24 @@ export function WithdrawalStepsModal({
       },
       {
         id: 7,
-        title: `Get ${transaction.amount} ${transaction.token} on Poseidon`,
+        title: finalizeCountdown !== null && finalizeCountdown > 0
+          ? `Wait ${finalizeCountdown} seconds before claiming`
+          : `Get ${transaction.amount} ${transaction.token} on Poseidon`,
         description: transaction.token,
         fee: '0.0000005 IP',
         feeUSD: '$0.001964',
         status: finalizeStatus,
-        buttonText: 'Get',
+        buttonText: finalizeCountdown !== null && finalizeCountdown > 0
+          ? `Wait ${finalizeCountdown}s`
+          : 'Get',
         action: onFinalize,
+        isWaitStep: finalizeCountdown !== null && finalizeCountdown > 0,
+        waitDuration: finalizeCountdown !== null && finalizeCountdown > 0
+          ? `${finalizeCountdown}s remaining`
+          : undefined,
       },
     ];
-  }, [transaction, onProve, onResolve, onResolveGame, onFinalize, countdown]);
+  }, [transaction, onProve, onResolve, onResolveGame, onFinalize, countdown, finalizeCountdown]);
 
   const getStepIcon = (step: Step) => {
     if (step.status === 'completed') {
@@ -344,15 +315,7 @@ export function WithdrawalStepsModal({
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-black rounded-2xl shadow-2xl z-50 overflow-hidden border border-gray-800"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2 border-b border-gray-900 bg-gray-950">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-                className="h-8 w-8 p-0 rounded-full bg-gray-900 hover:bg-gray-800"
-              >
-                <ArrowLeft className="h-4 w-4 text-white" />
-              </Button>
+            <div className="flex items-center justify-center p-4 pb-2 border-b border-gray-900 bg-gray-950">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center">
                   <span className="text-white font-bold text-xs">IP</span>
@@ -364,14 +327,6 @@ export function WithdrawalStepsModal({
                   <p className="text-xs text-gray-400">Via Native Bridge</p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-                className="h-8 w-8 p-0 rounded-full bg-gray-900 hover:bg-gray-800"
-              >
-                <X className="h-4 w-4 text-white" />
-              </Button>
             </div>
 
             {/* Tabs */}
@@ -402,66 +357,6 @@ export function WithdrawalStepsModal({
             <div className="px-4 pb-4">
               {activeTab === 'steps' ? (
                 <>
-                  {/* Test Mode Banner */}
-                  {TEST_MODE && (
-                    <div className="mb-3 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                      <div className="flex items-center gap-2 text-yellow-400 text-xs mb-1.5">
-                        <FlaskConical className="h-3 w-3" />
-                        <span className="font-semibold">Test Mode</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1">
-                        <Button
-                          onClick={() => handleTestModeAdvance('l2_confirmed')}
-                          disabled={transaction.status !== 'pending'}
-                          className="text-[10px] py-0.5 h-6 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 px-1"
-                          size="sm"
-                        >
-                          L2✓
-                        </Button>
-                        <Button
-                          onClick={() => handleTestModeAdvance('game_found')}
-                          disabled={!['l2_confirmed', 'waiting_game'].includes(transaction.status)}
-                          className="text-[10px] py-0.5 h-6 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 px-1"
-                          size="sm"
-                        >
-                          Game✓
-                        </Button>
-                        <Button
-                          onClick={() => handleTestModeAdvance('proof_generated')}
-                          disabled={!['game_found', 'generating_proof'].includes(transaction.status)}
-                          className="text-[10px] py-0.5 h-6 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 px-1"
-                          size="sm"
-                        >
-                          Proof✓
-                        </Button>
-                        <Button
-                          onClick={() => handleTestModeAdvance('proof_confirmed')}
-                          disabled={!['proof_generated', 'waiting_proof_signature', 'proof_submitted'].includes(transaction.status)}
-                          className="text-[10px] py-0.5 h-6 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 px-1"
-                          size="sm"
-                        >
-                          ProofL1✓
-                        </Button>
-                        <Button
-                          onClick={() => handleTestModeAdvance('game_resolved')}
-                          disabled={!['proof_confirmed', 'waiting_resolve_signature', 'resolving_game'].includes(transaction.status)}
-                          className="text-[10px] py-0.5 h-6 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 px-1"
-                          size="sm"
-                        >
-                          Resolve✓
-                        </Button>
-                        <Button
-                          onClick={() => handleTestModeAdvance('completed')}
-                          disabled={!['game_resolved', 'waiting_finalize_signature', 'finalizing'].includes(transaction.status)}
-                          className="text-[10px] py-0.5 h-6 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 px-1"
-                          size="sm"
-                        >
-                          Done✓
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
                 <div className="space-y-1.5">
                   {steps.map((step, index) => (
                     <div key={step.id}>
