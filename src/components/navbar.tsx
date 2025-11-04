@@ -6,11 +6,117 @@ import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
+import Image from 'next/image';
 import { CHAIN_IDS } from '@/lib/constants';
 
 interface NavbarProps {
   currentView?: 'bridge' | 'mint' | 'stake';
   onViewChange?: (view: 'bridge' | 'mint' | 'stake') => void;
+}
+
+// Component to display wallet balances - hooks must be called at component level
+function WalletBalances({ address }: { address: `0x${string}` }) {
+  const { data: l1Balance } = useBalance({
+    address,
+    chainId: CHAIN_IDS.L1,
+    query: {
+      enabled: !!address,
+      refetchInterval: 10000,
+    },
+  });
+
+  const { data: l2Balance } = useBalance({
+    address,
+    chainId: CHAIN_IDS.L2,
+    query: {
+      enabled: !!address,
+      refetchInterval: 10000,
+    },
+  });
+
+  const formatBalance = (balance: string) => {
+    const num = parseFloat(balance);
+    if (num === 0) return '0';
+    if (num < 0.0001) return '<0.0001';
+    if (num < 1) return num.toFixed(4);
+    if (num < 10) return num.toFixed(3);
+    return num.toFixed(2);
+  };
+
+  return (
+    <>
+      {/* L1 Balance */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider">L1</span>
+        <span className="text-sm text-white font-semibold tabular-nums">
+          {l1Balance ? formatBalance(formatUnits(l1Balance.value, 18)) : '0'}
+        </span>
+      </div>
+      
+      {/* Separator */}
+      <div className="w-px h-4 bg-white/20" />
+      
+      {/* L2 Balance */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wider">L2</span>
+        <span className="text-sm text-white font-semibold tabular-nums">
+          {l2Balance ? formatBalance(formatUnits(l2Balance.value, 18)) : '0'}
+        </span>
+      </div>
+    </>
+  );
+}
+
+// Component for mobile wallet balances
+function MobileWalletBalances({ address }: { address: `0x${string}` }) {
+  const { data: l1Balance } = useBalance({
+    address,
+    chainId: CHAIN_IDS.L1,
+    query: {
+      enabled: !!address,
+      refetchInterval: 10000,
+    },
+  });
+
+  const { data: l2Balance } = useBalance({
+    address,
+    chainId: CHAIN_IDS.L2,
+    query: {
+      enabled: !!address,
+      refetchInterval: 10000,
+    },
+  });
+
+  const formatBalance = (balance: string) => {
+    const num = parseFloat(balance);
+    if (num === 0) return '0';
+    if (num < 0.0001) return '<0.0001';
+    if (num < 1) return num.toFixed(4);
+    if (num < 10) return num.toFixed(3);
+    return num.toFixed(2);
+  };
+
+  return (
+    <div className="relative grid grid-cols-2 gap-3">
+      {/* L1 Balance */}
+      <div className="flex flex-col items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+        <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider">L1</span>
+        <span className="text-base text-white font-semibold tabular-nums">
+          {l1Balance ? formatBalance(formatUnits(l1Balance.value, 18)) : '0'}
+        </span>
+        <span className="text-[10px] font-bold text-gray-400 uppercase">IP</span>
+      </div>
+      
+      {/* L2 Balance */}
+      <div className="flex flex-col items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+        <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wider">L2</span>
+        <span className="text-base text-white font-semibold tabular-nums">
+          {l2Balance ? formatBalance(formatUnits(l2Balance.value, 18)) : '0'}
+        </span>
+        <span className="text-[10px] font-bold text-gray-400 uppercase">IP</span>
+      </div>
+    </div>
+  );
 }
 
 export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
@@ -88,35 +194,6 @@ export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
                   const ready = mounted;
                   const connected = ready && account && chain;
 
-                  // Get L1 balance
-                  const { data: l1Balance } = useBalance({
-                    address: account?.address as `0x${string}`,
-                    chainId: CHAIN_IDS.L1,
-                    query: {
-                      enabled: !!account?.address,
-                      refetchInterval: 10000,
-                    },
-                  });
-
-                  // Get L2 balance
-                  const { data: l2Balance } = useBalance({
-                    address: account?.address as `0x${string}`,
-                    chainId: CHAIN_IDS.L2,
-                    query: {
-                      enabled: !!account?.address,
-                      refetchInterval: 10000,
-                    },
-                  });
-
-                  const formatBalance = (balance: string) => {
-                    const num = parseFloat(balance);
-                    if (num === 0) return '0';
-                    if (num < 0.0001) return '<0.0001';
-                    if (num < 1) return num.toFixed(4);
-                    if (num < 10) return num.toFixed(3);
-                    return num.toFixed(2);
-                  };
-
                   return (
                     <div
                       {...(!ready && {
@@ -173,10 +250,11 @@ export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
                                   }}
                                 >
                                   {chain.iconUrl && (
-                                    <img
+                                    <Image
                                       alt={chain.name ?? 'Chain icon'}
                                       src={chain.iconUrl}
-                                      style={{ width: 18, height: 18 }}
+                                      width={18}
+                                      height={18}
                                     />
                                   )}
                                 </div>
@@ -195,24 +273,7 @@ export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
                               
                               {/* Balances */}
                               <div className="relative flex items-center gap-3">
-                                {/* L1 Balance */}
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider">L1</span>
-                                  <span className="text-sm text-white font-semibold tabular-nums">
-                                    {l1Balance ? formatBalance(formatUnits(l1Balance.value, 18)) : '0'}
-                                  </span>
-                                </div>
-                                
-                                {/* Separator */}
-                                <div className="w-px h-4 bg-white/20" />
-                                
-                                {/* L2 Balance */}
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wider">L2</span>
-                                  <span className="text-sm text-white font-semibold tabular-nums">
-                                    {l2Balance ? formatBalance(formatUnits(l2Balance.value, 18)) : '0'}
-                                  </span>
-                                </div>
+                                {account?.address && <WalletBalances address={account.address as `0x${string}`} />}
                                 
                                 {/* IP Badge */}
                                 <div className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-bold text-gray-300 uppercase tracking-wide">
@@ -302,35 +363,6 @@ export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
                   const ready = mounted;
                   const connected = ready && account && chain;
 
-                  // Get L1 balance
-                  const { data: l1Balance } = useBalance({
-                    address: account?.address as `0x${string}`,
-                    chainId: CHAIN_IDS.L1,
-                    query: {
-                      enabled: !!account?.address,
-                      refetchInterval: 10000,
-                    },
-                  });
-
-                  // Get L2 balance
-                  const { data: l2Balance } = useBalance({
-                    address: account?.address as `0x${string}`,
-                    chainId: CHAIN_IDS.L2,
-                    query: {
-                      enabled: !!account?.address,
-                      refetchInterval: 10000,
-                    },
-                  });
-
-                  const formatBalance = (balance: string) => {
-                    const num = parseFloat(balance);
-                    if (num === 0) return '0';
-                    if (num < 0.0001) return '<0.0001';
-                    if (num < 1) return num.toFixed(4);
-                    if (num < 10) return num.toFixed(3);
-                    return num.toFixed(2);
-                  };
-
                   return (
                     <div
                       {...(!ready && {
@@ -387,10 +419,11 @@ export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
                                   }}
                                 >
                                   {chain.iconUrl && (
-                                    <img
+                                    <Image
                                       alt={chain.name ?? 'Chain icon'}
                                       src={chain.iconUrl}
-                                      style={{ width: 20, height: 20 }}
+                                      width={20}
+                                      height={20}
                                     />
                                   )}
                                 </div>
@@ -408,25 +441,11 @@ export function Navbar({ currentView = 'bridge', onViewChange }: NavbarProps) {
                               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-blue-500/5 opacity-50" />
                               
                               {/* Balances Grid */}
-                              <div className="relative grid grid-cols-2 gap-3">
-                                {/* L1 Balance */}
-                                <div className="flex flex-col items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
-                                  <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider">L1</span>
-                                  <span className="text-base text-white font-semibold tabular-nums">
-                                    {l1Balance ? formatBalance(formatUnits(l1Balance.value, 18)) : '0'}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-gray-400 uppercase">IP</span>
+                              {account?.address && (
+                                <div className="relative">
+                                  <MobileWalletBalances address={account.address as `0x${string}`} />
                                 </div>
-                                
-                                {/* L2 Balance */}
-                                <div className="flex flex-col items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
-                                  <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wider">L2</span>
-                                  <span className="text-base text-white font-semibold tabular-nums">
-                                    {l2Balance ? formatBalance(formatUnits(l2Balance.value, 18)) : '0'}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-gray-400 uppercase">IP</span>
-                                </div>
-                              </div>
+                              )}
                               
                               {/* Address */}
                               <div className="relative flex items-center justify-center gap-2 pt-2 border-t border-white/10">
