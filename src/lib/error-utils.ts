@@ -7,13 +7,16 @@
  * @param error - The error to check
  * @returns true if the error is a user cancellation, false otherwise
  */
-export function isUserRejectedError(error: any): boolean {
+export function isUserRejectedError(error: unknown): boolean {
   if (!error) return false;
 
+  // Type guard for error objects
+  const err = error as { message?: string; code?: number | string; cause?: { message?: string }; name?: string };
+
   // Convert error to string for checking
-  const errorMessage = error?.message?.toLowerCase() || '';
-  const errorCode = error?.code;
-  const errorCause = error?.cause?.message?.toLowerCase() || '';
+  const errorMessage = err?.message?.toLowerCase() || '';
+  const errorCode = err?.code;
+  const errorCause = err?.cause?.message?.toLowerCase() || '';
 
   // Common user rejection patterns from different wallet providers
   const rejectionPatterns = [
@@ -50,11 +53,11 @@ export function isUserRejectedError(error: any): boolean {
   // ACTION_REJECTED is used by ethers.js
   const isRejectionCode = errorCode === 4001 ||
                           errorCode === 'ACTION_REJECTED' ||
-                          error?.code === 'ACTION_REJECTED';
+                          err?.code === 'ACTION_REJECTED';
 
   // Check for viem/wagmi specific error names
-  const isViemRejection = error?.name === 'UserRejectedRequestError' ||
-                          error?.name === 'UserRejectedError';
+  const isViemRejection = err?.name === 'UserRejectedRequestError' ||
+                          err?.name === 'UserRejectedError';
 
   return isRejectionMessage || isRejectionCode || isViemRejection;
 }
@@ -65,20 +68,23 @@ export function isUserRejectedError(error: any): boolean {
  * @param error - The error to format
  * @returns Formatted error message or null
  */
-export function formatTransactionError(error: any): string | null {
+export function formatTransactionError(error: unknown): string | null {
   // Don't display errors for user-cancelled transactions
   if (isUserRejectedError(error)) {
     return null;
   }
 
+  // Type guard for error objects
+  const err = error as { shortMessage?: string; message?: string };
+
   // Handle different error types
-  if (error?.shortMessage) {
-    return error.shortMessage;
+  if (err?.shortMessage) {
+    return err.shortMessage;
   }
 
-  if (error?.message) {
+  if (err?.message) {
     // Clean up technical error messages
-    const message = error.message;
+    const message = err.message;
 
     // Remove technical prefixes
     const cleanedMessage = message
@@ -102,7 +108,7 @@ export function formatTransactionError(error: any): string | null {
  * @param context - Context string for the error (e.g., "Bridge ETH")
  * @param error - The error to log
  */
-export function logTransactionError(context: string, error: any): void {
+export function logTransactionError(context: string, error: unknown): void {
   if (!isUserRejectedError(error)) {
     console.error(`❌ ${context}:`, error);
   } else {
