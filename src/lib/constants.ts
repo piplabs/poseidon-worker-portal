@@ -28,9 +28,6 @@ export const SWAP_ANIMATION_DURATION = 0;
 export const MIN_GAS_LIMIT = 200000;
 export const MAX_UINT256 = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
-// Test mode - set to true to manually progress through withdrawal steps without gas
-export const TEST_MODE = false;
-
 export const DECIMAL_PLACES = {
   BALANCE: 2,
   AMOUNT: 2,
@@ -48,8 +45,8 @@ export const PSDN_L1_TOKEN: Token = {
   symbol: "PSDN",
   name: "PSDN L1",
   balance: ZERO_AMOUNT,
-  logo: "https://psdn.ai/icon.png?07720b992e581016",
-  color: "bg-blue-500",
+  logo: "psdn-svg",
+  color: "bg-black",
   layer: "L1",
 };
 
@@ -57,8 +54,8 @@ export const PSDN_L2_TOKEN: Token = {
   symbol: "PSDN",
   name: "PSDN Proteus",
   balance: ZERO_AMOUNT,
-  logo: "https://psdn.ai/icon.png?07720b992e581016",
-  color: "bg-purple-500",
+  logo: "psdn-svg",
+  color: "bg-black",
   layer: "L2",
 };
 
@@ -67,7 +64,7 @@ export const ETH_L1_TOKEN: Token = {
   name: "Ethereum L1",
   balance: ZERO_AMOUNT,
   logo: "Ξ",
-  color: "bg-gray-500",
+  color: "bg-black",
   layer: "L1",
 };
 
@@ -76,7 +73,7 @@ export const ETH_L2_TOKEN: Token = {
   name: "Ethereum Proteus",
   balance: ZERO_AMOUNT,
   logo: "Ξ",
-  color: "bg-gray-600",
+  color: "bg-black",
   layer: "L2",
 };
 export const DEFAULT_FROM_TOKEN = PSDN_L1_TOKEN;

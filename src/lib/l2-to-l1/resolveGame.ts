@@ -1,5 +1,6 @@
 import { createPublicClient, http } from "viem";
 import { RPC_URLS } from "@/lib/constants";
+import { isUserRejectedError, logTransactionError } from "@/lib/error-utils";
 
 // DisputeGame ABI for resolution
 const disputeGameAbi = [
@@ -210,7 +211,9 @@ export async function resolveGame({
     
     return true;
   } catch (error) {
-    console.error('❌ Failed to resolve game:', error);
+    if (!isUserRejectedError(error)) {
+      logTransactionError('Failed to resolve game', error);
+    }
     throw error;
   } finally {
     setIsResolvingGame(false);

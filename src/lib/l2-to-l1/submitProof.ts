@@ -1,5 +1,6 @@
 import { CONTRACT_ADDRESSES, CHAIN_IDS } from "@/lib/constants";
 import { MessagePassedEventData, DisputeGameData, ProofData } from "./types";
+import { isUserRejectedError, logTransactionError } from "@/lib/error-utils";
 
 // OptimismPortal ABI for proof submission
 export const optimismPortalAbi = [
@@ -260,7 +261,9 @@ export async function submitProof({
     addNotification('success', '✅ Proof transaction submitted! Waiting for confirmation...');
     return 'proof_submitted';
   } catch (error) {
-    console.error('❌ Failed to submit proof:', error);
+    if (!isUserRejectedError(error)) {
+      logTransactionError('Failed to submit proof', error);
+    }
     throw error;
   }
 }

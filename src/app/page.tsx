@@ -20,6 +20,7 @@ import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt } 
 import { parseUnits, formatUnits } from "viem";
 import { motion } from "motion/react";
 import { CHAIN_IDS, MAX_UINT256, CONTRACT_ADDRESSES } from "@/lib/constants";
+import { isUserRejectedError, formatTransactionError } from "@/lib/error-utils";
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
@@ -124,7 +125,9 @@ export default function Home() {
         args: [address, amount],
       });
     } catch (err) {
-      console.error("Mint failed:", err);
+      if (!isUserRejectedError(err)) {
+        console.error("Mint failed:", err);
+      }
     }
   };
 
@@ -140,7 +143,9 @@ export default function Home() {
       });
       console.log('✅ Approval transaction submitted');
     } catch (err) {
-      console.error("Approve stake failed:", err);
+      if (!isUserRejectedError(err)) {
+        console.error("Approve stake failed:", err);
+      }
     }
   };
 
@@ -153,7 +158,9 @@ export default function Home() {
         args: [amount],
       });
     } catch (err) {
-      console.error("Register worker failed:", err);
+      if (!isUserRejectedError(err)) {
+        console.error("Register worker failed:", err);
+      }
     }
   };
 
@@ -165,7 +172,9 @@ export default function Home() {
         args: [],
       });
     } catch (err) {
-      console.error("Request unstake failed:", err);
+      if (!isUserRejectedError(err)) {
+        console.error("Request unstake failed:", err);
+      }
     }
   };
 
@@ -177,7 +186,9 @@ export default function Home() {
         args: [address],
       });
     } catch (err) {
-      console.error("Withdraw stake failed:", err);
+      if (!isUserRejectedError(err)) {
+        console.error("Withdraw stake failed:", err);
+      }
     }
   };
 
@@ -190,7 +201,9 @@ export default function Home() {
         args: [address, epochId],
       });
     } catch (err) {
-      console.error("Claim rewards failed:", err);
+      if (!isUserRejectedError(err)) {
+        console.error("Claim rewards failed:", err);
+      }
     }
   };
 
@@ -198,7 +211,9 @@ export default function Home() {
     try {
       await switchChain({ chainId: CHAIN_IDS.L2 });
     } catch (error) {
-      console.error('Failed to switch network:', error);
+      if (!isUserRejectedError(error)) {
+        console.error('Failed to switch network:', error);
+      }
     }
   };
 
@@ -206,7 +221,9 @@ export default function Home() {
     try {
       await switchChain({ chainId: CHAIN_IDS.L1 });
     } catch (error) {
-      console.error('Failed to switch network:', error);
+      if (!isUserRejectedError(error)) {
+        console.error('Failed to switch network:', error);
+      }
     }
   };
 
@@ -273,7 +290,11 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <h1 className="text-3xl font-bold">Worker Portal</h1>
-                    <p className="text-muted-foreground text-sm">Manage your worker registration and stake</p>
+                    <p className="text-muted-foreground text-sm">
+                      {workerInfo && workerInfo.registeredAt > BigInt(0)
+                        ? "Manage your worker registration and stake"
+                        : "Register as a worker to start earning rewards"}
+                    </p>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="px-3 py-1.5 text-xs font-bold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
@@ -483,328 +504,340 @@ export default function Home() {
                 </motion.div>
               )}
 
-              {/* Actions Grid - Register, Claim Rewards & Unstake */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                {/* Register Worker Card */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.4 }}
-                  className="bg-card border rounded-xl p-6 space-y-4"
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                    <div>
-                      <h3 className="text-lg font-bold">Register Worker</h3>
-                      <p className="text-xs text-muted-foreground">Stake PSDN to register</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Amount</span>
-                        <span className="text-xs text-muted-foreground">PSDN</span>
+              {/* Actions Grid - Conditional rendering based on worker registration */}
+              {/* Check if worker is NOT registered */}
+              {(!workerInfo || workerInfo.registeredAt === BigInt(0)) ? (
+                // When NOT registered: Show only Register Worker card, centered
+                <div className="flex justify-center mb-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="bg-card border rounded-xl p-6 space-y-4 w-full max-w-lg"
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Register Worker</h3>
+                        <p className="text-xs text-muted-foreground">Stake PSDN to register</p>
                       </div>
-                      <input
-                        type="text"
-                        value={stakeAmount}
-                        onChange={(e) => setStakeAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
-                      />
                     </div>
 
-                    {/* Network Check, Approval, and Register Button */}
-                    {!isOnL2 ? (
-                      <Button
-                        onClick={handleSwitchToL2}
-                        disabled={isSwitchingChain}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        {isSwitchingChain ? "Switching..." : "Switch to L2"}
-                      </Button>
-                    ) : (
-                      <>
-                        {/* Check if approval is needed */}
-                        {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
-                          <Button
-                            onClick={handleApproveStake}
-                            disabled={!address || isApproveStakePending}
-                            className="w-full"
-                            variant="outline"
-                          >
-                            {isApproveStakePending ? "Approving..." : "Approve PSDN"}
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={handleRegisterWorker}
-                            disabled={!address || isRegisterWorkerPending || !stakeAmount}
-                            className="w-full"
-                            variant="outline"
-                          >
-                            {isRegisterWorkerPending ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
-                          </Button>
-                        )}
-                      </>
-                    )}
+                    <div className="space-y-4">
+                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Amount</span>
+                          <span className="text-xs text-muted-foreground">PSDN</span>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={stakeAmount}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string, numbers, and one decimal point
+                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                              setStakeAmount(value);
+                            }
+                          }}
+                          placeholder="0.00"
+                          className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                        />
+                      </div>
 
-                    {/* Status Messages */}
-                    {!address && (
-                      <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                        <span className="text-amber-700 dark:text-amber-300 text-xs">
-                          Connect wallet to register
-                        </span>
-                      </div>
-                    )}
+                      {/* Network Check, Approval, and Register Button */}
+                      {!isOnL2 ? (
+                        <button
+                          onClick={handleSwitchToL2}
+                          disabled={isSwitchingChain}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                        </button>
+                      ) : (
+                        <>
+                          {/* Check if approval is needed */}
+                          {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
+                            <button
+                              onClick={handleApproveStake}
+                              disabled={!address || isApproveStakePending}
+                              className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isApproveStakePending ? "Approving..." : "Approve PSDN"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleRegisterWorker}
+                              disabled={!address || isRegisterWorkerPending || !stakeAmount}
+                              className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isRegisterWorkerPending ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
+                            </button>
+                          )}
+                        </>
+                      )}
 
-                    {approveStakeError && (
-                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <p className="text-destructive text-xs font-medium">
-                          {approveStakeError.message}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {registerWorkerError && (
-                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <p className="text-destructive text-xs font-medium">
-                          {registerWorkerError.message}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {isApproveStakeSuccess && !isRegisterWorkerSuccess && (
-                      <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <span className="text-blue-700 dark:text-blue-300 text-xs">
-                          PSDN approved! You can now register.
-                        </span>
-                      </div>
-                    )}
-                    
-                    {isRegisterWorkerSuccess && (
-                      <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-green-700 dark:text-green-300 text-xs">
-                          Successfully registered with {stakeAmount} PSDN!
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
+                      {/* Status Messages */}
+                      {!address && (
+                        <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                          <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                          <span className="text-amber-700 dark:text-amber-300 text-xs">
+                            Connect wallet to register
+                          </span>
+                        </div>
+                      )}
 
-                {/* Claim Rewards Card */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.5 }}
-                  className="bg-card border rounded-xl p-6 space-y-4"
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                    <div>
-                      <h3 className="text-lg font-bold">Claim Rewards</h3>
-                      <p className="text-xs text-muted-foreground">For specific epoch</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Current Rewards Display */}
-                    <div className="bg-gradient-to-br from-green-500/30 to-green-500/15 rounded-xl p-3 border border-green-500/40">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-gray-400 mb-1">Available Rewards</p>
-                          <p className="text-lg font-bold text-white">
-                            {workerRewards ? formatUnits(workerRewards, 18) : "0.00"} <span className="text-xs text-gray-500">PSDN</span>
+                      {approveStakeError && formatTransactionError(approveStakeError) && (
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-destructive text-xs font-medium">
+                            {formatTransactionError(approveStakeError)}
                           </p>
                         </div>
+                      )}
+
+                      {registerWorkerError && formatTransactionError(registerWorkerError) && (
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-destructive text-xs font-medium">
+                            {formatTransactionError(registerWorkerError)}
+                          </p>
+                        </div>
+                      )}
+
+                      {isApproveStakeSuccess && !isRegisterWorkerSuccess && (
+                        <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          <span className="text-blue-700 dark:text-blue-300 text-xs">
+                            PSDN approved! You can now register.
+                          </span>
+                        </div>
+                      )}
+
+                      {isRegisterWorkerSuccess && (
+                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-green-700 dark:text-green-300 text-xs">
+                            Successfully registered with {stakeAmount} PSDN!
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </div>
+              ) : (
+                // When registered: Show Claim Rewards and Unstake & Withdraw cards
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  {/* Claim Rewards Card */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="bg-card border rounded-xl p-6 space-y-4"
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Claim Rewards</h3>
+                        <p className="text-xs text-muted-foreground">For specific epoch</p>
                       </div>
                     </div>
 
-                    {/* Epoch Input */}
-                    <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Epoch ID</span>
+                    <div className="space-y-4">
+                      {/* Current Rewards Display */}
+                      <div className="bg-gradient-to-br from-green-500/30 to-green-500/15 rounded-xl p-3 border border-green-500/40">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-gray-400 mb-1">Available Rewards</p>
+                            <p className="text-lg font-bold text-white">
+                              {workerRewards ? formatUnits(workerRewards, 18) : "0.00"} <span className="text-xs text-gray-500">PSDN</span>
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        type="text"
-                        value={rewardEpochId}
-                        onChange={(e) => setRewardEpochId(e.target.value)}
-                        placeholder={currentEpochId ? currentEpochId.toString() : "Enter epoch ID"}
-                        className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
-                      />
-                    </div>
 
-                    {/* Claim Button */}
-                    {!isOnL2 ? (
-                      <Button
-                        onClick={handleSwitchToL2}
-                        disabled={isSwitchingChain}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        {isSwitchingChain ? "Switching..." : "Switch to L2"}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleClaimRewards}
-                        disabled={!address || isClaimRewardsPending || !rewardEpochId}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        {isClaimRewardsPending ? "Claiming..." : isClaimRewardsSuccess ? "Claimed!" : "Claim Rewards"}
-                      </Button>
-                    )}
-
-                    {/* Status Messages */}
-                    {!address && (
-                      <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                        <span className="text-amber-700 dark:text-amber-300 text-xs">
-                          Connect wallet to claim
-                        </span>
+                      {/* Epoch Input */}
+                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Epoch ID</span>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={rewardEpochId}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string or only integers (no decimal point)
+                            if (value === '' || /^\d+$/.test(value)) {
+                              setRewardEpochId(value);
+                            }
+                          }}
+                          placeholder={currentEpochId ? currentEpochId.toString() : "Enter epoch ID"}
+                          className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                        />
                       </div>
-                    )}
 
-                    {claimRewardsError && (
-                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <p className="text-destructive text-xs font-medium">
-                          {claimRewardsError.message}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {isClaimRewardsSuccess && (
-                      <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-green-700 dark:text-green-300 text-xs">
-                          Successfully claimed rewards for epoch {rewardEpochId}!
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-
-                {/* Unstake & Withdraw Card */}
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.6 }}
-                  className="bg-card border rounded-xl p-6 space-y-4"
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                    <div>
-                      <h3 className="text-lg font-bold">Unstake & Withdraw</h3>
-                      <p className="text-xs text-muted-foreground">Two-step process</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Info Box */}
-                    <div className="bg-muted/30 rounded-lg p-3">
-                      <p className="text-xs text-muted-foreground">
-                        First request unstake, then withdraw your PSDN tokens after the waiting period.
-                      </p>
-                    </div>
-
-                    {/* Unstake Buttons */}
-                    {!isOnL2 ? (
-                      <Button
-                        onClick={handleSwitchToL2}
-                        disabled={isSwitchingChain}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        {isSwitchingChain ? "Switching..." : "Switch to L2"}
-                      </Button>
-                    ) : (
-                      <>
-                        {/* Step 1: Request Unstake */}
-                        <Button
-                          onClick={handleRequestUnstake}
-                          disabled={!address || isRequestUnstakePending || (workerInfo && workerInfo.unstakeRequestedAt > BigInt(0))}
-                          className="w-full"
-                          variant="outline"
+                      {/* Claim Button */}
+                      {!isOnL2 ? (
+                        <button
+                          onClick={handleSwitchToL2}
+                          disabled={isSwitchingChain}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) 
-                            ? "Unstake Already Requested" 
-                            : isRequestUnstakePending 
-                              ? "Requesting..." 
-                              : isRequestUnstakeSuccess 
-                                ? "Unstake Requested!" 
-                                : "1. Request Unstake"}
-                        </Button>
-
-                        {/* Step 2: Withdraw Stake */}
-                        <Button
-                          onClick={handleWithdrawStake}
-                          disabled={
-                            !address || 
-                            isWithdrawStakePending || 
-                            !(workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)) || 
-                            (workerInfo && workerInfo.stakedAmount === BigInt(0))
-                          }
-                          className="w-full"
-                          variant="outline"
+                          {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleClaimRewards}
+                          disabled={!address || isClaimRewardsPending || !rewardEpochId}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {workerInfo && workerInfo.stakedAmount === BigInt(0)
-                            ? "Already Withdrawn"
-                            : isWithdrawStakePending 
-                              ? "Withdrawing..." 
-                              : isWithdrawStakeSuccess 
-                                ? "Withdrawn!" 
-                                : "2. Withdraw Stake"}
-                        </Button>
-                      </>
-                    )}
+                          {isClaimRewardsPending ? "Claiming..." : isClaimRewardsSuccess ? "Claimed!" : "Claim Rewards"}
+                        </button>
+                      )}
 
-                    {/* Status Messages */}
-                    {!address && (
-                      <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                        <span className="text-amber-700 dark:text-amber-300 text-xs">
-                          Connect wallet to unstake
-                        </span>
+                      {/* Status Messages */}
+                      {!address && (
+                        <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                          <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                          <span className="text-amber-700 dark:text-amber-300 text-xs">
+                            Connect wallet to claim
+                          </span>
+                        </div>
+                      )}
+
+                      {claimRewardsError && formatTransactionError(claimRewardsError) && (
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-destructive text-xs font-medium">
+                            {formatTransactionError(claimRewardsError)}
+                          </p>
+                        </div>
+                      )}
+
+                      {isClaimRewardsSuccess && (
+                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-green-700 dark:text-green-300 text-xs">
+                            Successfully claimed rewards for epoch {rewardEpochId}!
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {/* Unstake & Withdraw Card */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                    className="bg-card border rounded-xl p-6 space-y-4"
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Unstake & Withdraw</h3>
+                        <p className="text-xs text-muted-foreground">Two-step process</p>
                       </div>
-                    )}
+                    </div>
 
-                    {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
-                      <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <span className="text-blue-700 dark:text-blue-300 text-xs">
-                          Unstake requested. Waiting for epoch {workerInfo.unstakeEffectiveEpoch.toString()} to withdraw.
-                        </span>
-                      </div>
-                    )}
-
-                    {requestUnstakeError && (
-                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <p className="text-destructive text-xs font-medium">
-                          {requestUnstakeError.message}
+                    <div className="space-y-4">
+                      {/* Info Box */}
+                      <div className="bg-muted/30 rounded-lg p-3">
+                        <p className="text-xs text-muted-foreground">
+                          First request unstake, then withdraw your PSDN tokens after the waiting period.
                         </p>
                       </div>
-                    )}
 
-                    {withdrawStakeError && (
-                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <p className="text-destructive text-xs font-medium">
-                          {withdrawStakeError.message}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount === BigInt(0) && (
-                      <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-green-700 dark:text-green-300 text-xs">
-                          Successfully withdrawn your stake!
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              </div>
+                      {/* Unstake Buttons */}
+                      {!isOnL2 ? (
+                        <button
+                          onClick={handleSwitchToL2}
+                          disabled={isSwitchingChain}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                        </button>
+                      ) : (
+                        <>
+                          {/* Step 1: Request Unstake */}
+                          <button
+                            onClick={handleRequestUnstake}
+                            disabled={!address || isRequestUnstakePending || (workerInfo && workerInfo.unstakeRequestedAt > BigInt(0))}
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                              ? "Unstake Already Requested"
+                              : isRequestUnstakePending
+                                ? "Requesting..."
+                                : isRequestUnstakeSuccess
+                                  ? "Unstake Requested!"
+                                  : "1. Request Unstake"}
+                          </button>
+
+                          {/* Step 2: Withdraw Stake */}
+                          <button
+                            onClick={handleWithdrawStake}
+                            disabled={
+                              !address ||
+                              isWithdrawStakePending ||
+                              !(workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)) ||
+                              (workerInfo && workerInfo.stakedAmount === BigInt(0))
+                            }
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {workerInfo && workerInfo.stakedAmount === BigInt(0)
+                              ? "Already Withdrawn"
+                              : isWithdrawStakePending
+                                ? "Withdrawing..."
+                                : isWithdrawStakeSuccess
+                                  ? "Withdrawn!"
+                                  : "2. Withdraw Stake"}
+                          </button>
+                        </>
+                      )}
+
+                      {/* Status Messages */}
+                      {!address && (
+                        <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                          <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                          <span className="text-amber-700 dark:text-amber-300 text-xs">
+                            Connect wallet to unstake
+                          </span>
+                        </div>
+                      )}
+
+                      {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
+                        <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          <span className="text-blue-700 dark:text-blue-300 text-xs">
+                            Unstake requested. Waiting for epoch {workerInfo.unstakeEffectiveEpoch.toString()} to withdraw.
+                          </span>
+                        </div>
+                      )}
+
+                      {requestUnstakeError && formatTransactionError(requestUnstakeError) && (
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-destructive text-xs font-medium">
+                            {formatTransactionError(requestUnstakeError)}
+                          </p>
+                        </div>
+                      )}
+
+                      {withdrawStakeError && formatTransactionError(withdrawStakeError) && (
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-destructive text-xs font-medium">
+                            {formatTransactionError(withdrawStakeError)}
+                          </p>
+                        </div>
+                      )}
+
+                      {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount === BigInt(0) && (
+                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-green-700 dark:text-green-300 text-xs">
+                            Successfully withdrawn your stake!
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </div>
+              )}
             </div>
       ) : (
         <div className="w-full max-w-md mx-auto">
@@ -814,19 +847,15 @@ export default function Home() {
             transition={{ duration: 0.6, ease: "easeOut" }}
             className="bg-card text-card-foreground border rounded-2xl p-6 space-y-4 shadow-lg relative overflow-hidden"
           >
-            {/* Futuristic background glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-cyan-500/5 rounded-2xl pointer-events-none" />
-            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent pointer-events-none" />
-            
             {/* Header */}
             <div className="text-center space-y-3">
               <div className="flex items-center justify-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                  <img 
-                    src="https://psdn.ai/icon.png?07720b992e581016" 
-                    alt="PSDN"
-                    className="w-6 h-6 rounded-full object-cover"
-                  />
+                <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
+                  <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white">
+                    <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                    <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                    <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                  </svg>
                 </div>
                 <div className="text-left">
                   <h1 className="text-2xl font-bold">Mint PSDN L1</h1>
@@ -846,12 +875,12 @@ export default function Home() {
               <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                      <img 
-                        src="https://psdn.ai/icon.png?07720b992e581016" 
-                        alt="PSDN"
-                        className="w-4 h-4 rounded-full object-cover"
-                      />
+                    <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center">
+                      <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
+                        <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                        <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                        <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                      </svg>
                     </div>
                     <div>
                       <div className="text-foreground font-medium">PSDN L1</div>
@@ -863,8 +892,15 @@ export default function Home() {
                 <div className="space-y-2">
                   <input
                     type="text"
+                    inputMode="decimal"
                     value={mintAmount}
-                    onChange={(e) => setMintAmount(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Allow empty string, numbers, and one decimal point
+                      if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                        setMintAmount(value);
+                      }
+                    }}
                     placeholder="0"
                     className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
                   />
@@ -874,30 +910,28 @@ export default function Home() {
 
               {/* Network Check and Mint Button */}
               {!isOnL1 ? (
-                <Button
+                <button
                   onClick={handleSwitchToL1}
                   disabled={isSwitchingChain}
-                  className="w-full mt-6"
-                  variant="outline"
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSwitchingChain ? "Switching..." : "Switch to Poseidon Devnet (L1)"}
-                </Button>
+                </button>
               ) : (
-                <Button
+                <button
                   onClick={handleMint}
                   disabled={!address || isPending || !mintAmount}
-                  className="w-full mt-6"
-                  variant="outline"
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isPending ? "Minting..." : isSuccess ? "Minted!" : "Mint"}
-                </Button>
+                </button>
               )}
 
-              {/* Status Messages */}
-              {error && (
+              {/* Status Messages - Only show non-cancelled errors */}
+              {error && formatTransactionError(error) && (
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <p className="text-destructive text-sm font-medium">
-                    Error: {error.message}
+                    Error: {formatTransactionError(error)}
                   </p>
                 </div>
               )}
