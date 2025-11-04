@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { useWithdrawalTransactions, type TransactionStatus, TransactionStorage } from "@/lib/transaction-tracker";
 import { CHAIN_IDS } from "@/lib/constants";
 
+import type { WithdrawalTransaction } from "@/lib/transaction-tracker";
+
 interface PendingTransactionsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSelectTransaction?: (transaction: WithdrawalTransaction) => void;
 }
 
 // Helper function to get readable status label
@@ -69,7 +72,7 @@ function getProgress(status: TransactionStatus): number {
   return progressMap[status] || 0;
 }
 
-export function PendingTransactionsModal({ isOpen, onClose }: PendingTransactionsModalProps) {
+export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction }: PendingTransactionsModalProps) {
   const { transactions, activeTransactions, completedTransactions, erroredTransactions } = useWithdrawalTransactions();
   const [selectedTab, setSelectedTab] = useState<'active' | 'completed'>('active');
 
@@ -167,125 +170,107 @@ export function PendingTransactionsModal({ isOpen, onClose }: PendingTransaction
                   <p>No {selectedTab} transactions</p>
                 </div>
               ) : (
-                displayTransactions.map((tx) => (
-                  <motion.div
-                    key={tx.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="border rounded-lg p-4 space-y-3 bg-background"
-                  >
-                    {/* Transaction Header */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          {getStatusIcon(tx.status)}
-                          <span className="font-medium text-sm">
-                            {tx.amount} {tx.token}
-                          </span>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                            {tx.type === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'}
-                          </span>
+                displayTransactions.map((tx) => {
+                  const isL2ToL1 = tx.type === 'L2_TO_L1';
+                  const isClickable = isL2ToL1 && tx.status !== 'completed';
+
+                  return (
+                    <motion.div
+                      key={tx.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`border rounded-lg p-4 space-y-3 bg-background transition-colors ${
+                        isClickable
+                          ? 'cursor-pointer hover:bg-accent/50 hover:border-primary/50'
+                          : ''
+                      }`}
+                      onClick={() => {
+                        if (isClickable && onSelectTransaction) {
+                          onSelectTransaction(tx);
+                          onClose();
+                        }
+                      }}
+                    >
+                      {/* Transaction Header */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {getStatusIcon(tx.status)}
+                            <span className="font-medium text-sm">
+                              {tx.amount} {tx.token}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                              {tx.type === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {getStatusLabel(tx.status)}
+                          </p>
+                          {isClickable && (
+                            <p className="text-xs text-primary mt-1">
+                              Click to view details and actions
+                            </p>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {getStatusLabel(tx.status)}
-                        </p>
+                        <div className="text-right text-xs text-muted-foreground">
+                          {new Date(tx.updatedAt).toLocaleString()}
+                        </div>
                       </div>
-                      <div className="text-right text-xs text-muted-foreground">
-                        {new Date(tx.updatedAt).toLocaleString()}
-                      </div>
-                    </div>
 
-                    {/* Progress Bar */}
-                    {tx.status !== 'error' && tx.status !== 'completed' && (
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${getProgress(tx.status)}%` }}
-                          transition={{ duration: 0.5 }}
-                          className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
-                        />
-                      </div>
-                    )}
-                    
-                    {/* Completed Progress Bar */}
-                    {tx.status === 'completed' && (
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full w-full bg-gradient-to-r from-blue-500 to-purple-500" />
-                      </div>
-                    )}
+                      {/* Progress Bar */}
+                      {tx.status !== 'error' && tx.status !== 'completed' && (
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${getProgress(tx.status)}%` }}
+                            transition={{ duration: 0.5 }}
+                            className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                          />
+                        </div>
+                      )}
 
-                    {/* Error Message */}
-                    {tx.errorMessage && (
-                      <div className="bg-red-500/10 border border-red-500/20 rounded p-2">
-                        <p className="text-xs text-red-500">{tx.errorMessage}</p>
-                      </div>
-                    )}
+                      {/* Completed Progress Bar */}
+                      {tx.status === 'completed' && (
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full w-full bg-gradient-to-r from-blue-500 to-purple-500" />
+                        </div>
+                      )}
 
-                    {/* Transaction Links */}
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      {tx.type === 'L1_TO_L2' && tx.l1TxHash && (
-                        <a
-                          href={getBlockExplorerUrl(tx.l1TxHash, CHAIN_IDS.L1)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          L1 Tx <ExternalLink className="h-3 w-3" />
-                        </a>
+                      {/* Error Message */}
+                      {tx.errorMessage && (
+                        <div className="bg-red-500/10 border border-red-500/20 rounded p-2">
+                          <p className="text-xs text-red-500">{tx.errorMessage}</p>
+                        </div>
                       )}
-                      {tx.type === 'L2_TO_L1' && tx.l2TxHash && (
-                        <a
-                          href={getBlockExplorerUrl(tx.l2TxHash, CHAIN_IDS.L2)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          L2 Tx <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                      {tx.l1ProofTxHash && (
-                        <a
-                          href={getBlockExplorerUrl(tx.l1ProofTxHash, CHAIN_IDS.L1)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          Proof [L1] <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                      {tx.l1ResolveClaimsTxHash && (
-                        <a
-                          href={getBlockExplorerUrl(tx.l1ResolveClaimsTxHash, CHAIN_IDS.L1)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          Claims [L1] <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                      {tx.l1ResolveGameTxHash && (
-                        <a
-                          href={getBlockExplorerUrl(tx.l1ResolveGameTxHash, CHAIN_IDS.L1)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          Game [L1] <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                      {tx.l1FinalizeTxHash && (
-                        <a
-                          href={getBlockExplorerUrl(tx.l1FinalizeTxHash, CHAIN_IDS.L1)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                        >
-                          Finalize [L1] <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </div>
-                  </motion.div>
-                ))
+
+                      {/* Transaction Links - Only show basic info */}
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {tx.type === 'L1_TO_L2' && tx.l1TxHash && (
+                          <a
+                            href={getBlockExplorerUrl(tx.l1TxHash, CHAIN_IDS.L1)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View on Explorer <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                        {tx.type === 'L2_TO_L1' && tx.l2TxHash && (
+                          <a
+                            href={getBlockExplorerUrl(tx.l2TxHash, CHAIN_IDS.L2)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View L2 Transaction <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })
               )}
             </div>
           </motion.div>

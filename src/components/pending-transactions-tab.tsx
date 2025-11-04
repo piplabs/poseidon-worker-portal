@@ -3,19 +3,21 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PendingTransactionsModal } from "@/components/pending-transactions-modal";
-import { useWithdrawalTransactions } from "@/lib/transaction-tracker";
+import { useWithdrawalTransactions, type WithdrawalTransaction } from "@/lib/transaction-tracker";
 
-export function PendingTransactionsTab() {
+interface PendingTransactionsTabProps {
+  onSelectTransaction?: (transaction: WithdrawalTransaction) => void;
+}
+
+export function PendingTransactionsTab({ onSelectTransaction }: PendingTransactionsTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { activeTransactions, completedTransactions } = useWithdrawalTransactions();
   
   const pendingCount = activeTransactions.length;
-  const totalCount = activeTransactions.length + completedTransactions.length;
 
-  // Show tab if there are any active or completed transactions
-  if (totalCount === 0) {
+  // Only show tab when there are pending transactions
+  if (pendingCount === 0) {
     return null;
   }
 
@@ -24,42 +26,41 @@ export function PendingTransactionsTab() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="fixed bottom-4 right-4 z-40"
+        className="fixed bottom-6 right-6 z-40"
       >
-        <Button
-          variant="outline"
-          size="sm"
+        <button
           onClick={() => setIsModalOpen(true)}
-          className="bg-card/80 backdrop-blur-sm border transition-all duration-200 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="group relative flex items-center gap-3 pl-3 pr-4 py-2.5 bg-gradient-to-br from-yellow-500/20 to-orange-500/10 hover:from-yellow-500/30 hover:to-orange-500/20 rounded-xl transition-all duration-200 border border-yellow-500/30 hover:border-yellow-500/40 shadow-lg hover:shadow-xl overflow-hidden"
         >
-          <div className="flex items-center space-x-2">
-            {pendingCount > 0 ? (
-              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-            ) : (
-              <svg className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-            <span className="font-medium">Pending</span>
-            <motion.span
-              key={totalCount}
+          {/* Subtle gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/0 via-yellow-500/10 to-yellow-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          
+          <div className="relative flex items-center gap-3">
+            {/* Spinning loader */}
+            <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
+            
+            {/* Pending text */}
+            <span className="text-sm font-semibold text-yellow-100">Pending</span>
+            
+            {/* Count badge */}
+            <motion.div
+              key={pendingCount}
               initial={{ scale: 1.2 }}
               animate={{ scale: 1 }}
-              className={`text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center ${
-                pendingCount > 0 
-                  ? 'bg-blue-500/20 text-blue-600 border border-blue-500/30' 
-                  : 'bg-green-500 text-green-900'
-              }`}
+              className="flex items-center justify-center min-w-[24px] h-6 px-2 bg-yellow-500/30 rounded-lg border border-yellow-400/40"
             >
-              {totalCount}
-            </motion.span>
+              <span className="text-xs font-bold text-yellow-200 tabular-nums">
+                {pendingCount}
+              </span>
+            </motion.div>
           </div>
-        </Button>
+        </button>
       </motion.div>
 
       <PendingTransactionsModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSelectTransaction={onSelectTransaction}
       />
     </>
   );

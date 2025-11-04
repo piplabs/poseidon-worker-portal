@@ -1,6 +1,7 @@
 import { createPublicClient, http } from "viem";
 import { CONTRACT_ADDRESSES, RPC_URLS } from "@/lib/constants";
 import { MessagePassedEventData } from "./types";
+import { isUserRejectedError, logTransactionError } from "@/lib/error-utils";
 
 export interface FinalizeWithdrawalParams {
   withdrawalDetails: MessagePassedEventData;
@@ -135,7 +136,9 @@ export async function finalizeWithdrawal({
     
     return true;
   } catch (error) {
-    console.error('❌ Failed to finalize withdrawal:', error);
+    if (!isUserRejectedError(error)) {
+      logTransactionError('Failed to finalize withdrawal', error);
+    }
     throw error;
   }
 }
