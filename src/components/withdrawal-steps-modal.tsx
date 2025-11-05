@@ -16,7 +16,7 @@ interface WithdrawalStepsModalProps {
   onFinalize: () => void;
 }
 
-type StepStatus = 'pending' | 'active' | 'waiting' | 'completed';
+type StepStatus = 'pending' | 'active' | 'waiting' | 'confirming' | 'completed';
 
 interface Step {
   id: number;
@@ -123,7 +123,7 @@ export function WithdrawalStepsModal({
     
     // Step 1: Start on L2
     const step1Status: StepStatus = 
-      txStatus === 'pending' ? 'active' :
+      txStatus === 'pending' ? 'confirming' :
       ['l2_confirmed', 'waiting_game', 'game_found', 'generating_proof', 'proof_generated', 
        'waiting_proof_signature', 'proof_submitted', 'proof_confirmed', 'waiting_resolve_signature',
        'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
@@ -141,18 +141,18 @@ export function WithdrawalStepsModal({
     const step2Status: StepStatus =
       // Only active when proof is generated and ready
       txStatus === 'proof_generated' ? 'active' :
-      // Show as waiting while generating or waiting for user signature (but NOT proof_submitted or proof_confirmed)
+      // Show as waiting while generating or waiting for user signature
       ['game_found', 'generating_proof', 'waiting_proof_signature'].includes(txStatus) ? 'waiting' :
-      // Completed after transaction is submitted AND confirmed on L1
-      ['proof_submitted', 'proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
+      // Show as confirming while transaction is being confirmed
+      txStatus === 'proof_submitted' ? 'confirming' :
+      // Completed after transaction is confirmed on L1
+      ['proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
        'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Wait for challenge period (10 seconds)
     const isChallengePeriodComplete = countdown === 0 || (countdown === null && txStatus !== 'proof_confirmed');
     const waitChallengeStatus: StepStatus =
-      // Waiting during proof_submitted
-      txStatus === 'proof_submitted' ? 'waiting' :
       // Waiting during proof_confirmed but only while countdown is running
       (txStatus === 'proof_confirmed' && countdown !== null && countdown > 0) ? 'waiting' :
       // Completed when countdown is done OR we've moved to next steps
@@ -173,9 +173,10 @@ export function WithdrawalStepsModal({
 
     // Step 4: Resolve Game on L1
     const resolveGameStatus: StepStatus =
-      // Active when resolve claims is done and ready for resolve game
-      txStatus === 'resolving_game' ? 'active' :
-      // Waiting is not needed here, user clicks button immediately
+      // If resolving_game AND transaction has been submitted, show as confirming
+      (txStatus === 'resolving_game' && transaction.l1ResolveGameTxHash) ? 'confirming' :
+      // If resolving_game but no transaction hash yet, button should be active (waiting for user to click)
+      (txStatus === 'resolving_game' && !transaction.l1ResolveGameTxHash) ? 'active' :
       // Completed after resolve game is confirmed
       ['game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
@@ -186,10 +187,10 @@ export function WithdrawalStepsModal({
     const finalizeStatus: StepStatus =
       // Only active when game is resolved AND finalization countdown is complete
       (txStatus === 'game_resolved' && isFinalizeReady) ? 'active' :
-      // Waiting during the finalization countdown
-      (txStatus === 'game_resolved' && !isFinalizeReady) ? 'waiting' :
-      // Show as waiting while user is signing or transaction is confirming
-      ['waiting_finalize_signature', 'finalizing'].includes(txStatus) ? 'waiting' :
+      // Waiting during the finalization countdown or user signature
+      (txStatus === 'game_resolved' && !isFinalizeReady) || txStatus === 'waiting_finalize_signature' ? 'waiting' :
+      // Show as confirming while transaction is being confirmed
+      txStatus === 'finalizing' ? 'confirming' :
       txStatus === 'completed' ? 'completed' : 'pending';
 
     return [
@@ -272,12 +273,16 @@ export function WithdrawalStepsModal({
 
   const getStepIcon = (step: Step) => {
     if (step.status === 'completed') {
-      return <CheckCircle2 className="h-4 w-4 text-gray-400" />;
+      return (
+        <div className="h-4 w-4 rounded-full bg-gray-400 flex items-center justify-center">
+          <Circle className="h-2 w-2 text-gray-900 fill-gray-900" />
+        </div>
+      );
     }
     if (step.status === 'waiting') {
       return <Clock className="h-4 w-4 text-gray-400" />;
     }
-    if (step.status === 'active') {
+    if (step.status === 'active' || step.status === 'confirming') {
       return (
         <div className="h-4 w-4 rounded-full bg-gray-400 flex items-center justify-center">
           <Circle className="h-2 w-2 text-gray-900 fill-gray-900" />
@@ -288,7 +293,8 @@ export function WithdrawalStepsModal({
   };
 
   const getStepIconBg = (step: Step) => {
-    if (step.status === 'completed') return 'bg-gray-950';
+    if (step.status === 'completed') return 'bg-gray-700/50';
+    if (step.status === 'confirming') return 'bg-gray-800/50';
     if (step.status === 'active') return 'bg-gray-950';
     if (step.status === 'waiting') return 'bg-gray-950';
     return 'bg-black';
@@ -362,7 +368,7 @@ export function WithdrawalStepsModal({
                     <div key={step.id}>
                       <div
                         className={`flex items-center justify-between p-3 rounded-xl transition-all ${
-                          step.status === 'active' || step.status === 'waiting'
+                          step.status === 'active' || step.status === 'waiting' || step.status === 'confirming'
                             ? 'bg-gray-900 border border-gray-800'
                             : step.status === 'completed'
                             ? 'bg-gray-950 border border-gray-900'
@@ -388,7 +394,12 @@ export function WithdrawalStepsModal({
                                 ⏱️ {step.waitDuration}
                               </p>
                             )}
-                            {step.fee && !step.isWaitStep && (
+                            {step.status === 'confirming' && !step.isWaitStep && (
+                              <p className="text-[10px] text-gray-300 font-semibold">
+                                Confirming transaction...
+                              </p>
+                            )}
+                            {step.fee && !step.isWaitStep && step.status !== 'confirming' && (
                               <p className="text-[10px] text-gray-500">
                                 💰 {step.fee} <span className="text-gray-600">{step.feeUSD}</span>
                               </p>
@@ -396,7 +407,14 @@ export function WithdrawalStepsModal({
                           </div>
                         </div>
                         {step.status === 'completed' ? (
-                          <div className="text-green-400 text-lg font-bold">✓</div>
+                          <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : step.status === 'confirming' ? (
+                          <svg className="h-5 w-5 text-gray-300 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
                         ) : step.action && step.buttonText ? (
                           <Button
                             onClick={step.action}

@@ -36,13 +36,9 @@ export async function finalizeWithdrawal({
     console.log('STEP 6: FINALIZE WITHDRAWAL');
     console.log('═'.repeat(80));
     
-    // Wait for challenge period
-    console.log('\n⏳ Waiting 10 second challenge period...');
-    for (let i = 0; i < 10; i++) {
-      console.log(`   ${i + 1}/10 seconds`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    console.log('✅ Challenge period completed');
+    // Note: Challenge period countdown is now handled by the UI
+    // The user already waited 10 seconds before clicking the "Get" button
+    console.log('✅ Challenge period already completed (handled by UI countdown)');
 
     // Create L1 client for reading balances
     const l1Client = createPublicClient({
