@@ -83,6 +83,10 @@ export function BridgeInterface() {
   
   // Track which transactions are currently being processed to prevent duplicates
   const processingTxs = useRef<Set<string>>(new Set());
+  
+  // Ref to track if we should auto-continue after approval
+  const shouldContinueAfterApproval = useRef(false);
+  const lastProcessedApprovalHash = useRef<string | null>(null);
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -777,7 +781,7 @@ export function BridgeInterface() {
   }, [isL2ToL1]);
   
   // Transaction hooks
-  const { writeContract: writeApprove, isPending: isApprovePending, error: approveError } = useWriteMintPsdnApprove();
+  const { writeContract: writeApprove, isPending: isApprovePending, error: approveError, data: approveTxHash } = useWriteMintPsdnApprove();
   const { writeContract: writeBridgeEth, isPending: isBridgeEthPending, error: bridgeEthError, data: bridgeEthTxData } = useWriteBridgeBridgeEthTo();
   const { writeContract: writeDepositErc20, isPending: isDepositErc20Pending, error: depositErc20Error, data: depositErc20TxData } = useWriteBridgeDepositErc20To();
   const { writeContract: writeL2BridgeErc20, isPending: isL2BridgeErc20Pending, error: l2BridgeErc20Error, data: l2TxData } = useWriteL2BridgeBridgeErc20();
@@ -789,6 +793,14 @@ export function BridgeInterface() {
     chainId: CHAIN_IDS.L2,
     query: {
       enabled: !!l2TxHash,
+    },
+  });
+
+  // Wait for approval transaction confirmation
+  const { isSuccess: isApproveSuccess, isLoading: isApproveConfirming } = useWaitForTransactionReceipt({
+    hash: approveTxHash as `0x${string}`,
+    query: {
+      enabled: !!approveTxHash,
     },
   });
 
@@ -854,6 +866,7 @@ export function BridgeInterface() {
     },
   });
 
+  // L1 allowance for Bridge contract (L1 -> L2 transfers)
   const { data: currentAllowance, refetch: refetchAllowance } = useReadMintPsdnAllowance({
     args: address ? [address, CONTRACT_ADDRESSES.BRIDGE] : undefined,
     query: { 
@@ -863,6 +876,18 @@ export function BridgeInterface() {
       retryDelay: 1000,
     },
     chainId: CHAIN_IDS.L1,
+  });
+
+  // L2 allowance for L2Bridge contract (L2 -> L1 transfers)
+  const { data: l2Allowance, refetch: refetchL2Allowance } = useReadMintPsdnAllowance({
+    args: address ? [address, CONTRACT_ADDRESSES.L2_BRIDGE] : undefined,
+    query: { 
+      enabled: !!address,
+      refetchInterval: POLLING_INTERVAL,
+      retry: 3,
+      retryDelay: 1000,
+    },
+    chainId: CHAIN_IDS.L2,
   });
 
   // Balance update effects - Update tokens with correct balances based on layer and symbol
@@ -939,8 +964,9 @@ export function BridgeInterface() {
       refetchIpBalance();
       refetchIpL2Balance();
       refetchAllowance();
+      refetchL2Allowance();
     }
-  }, [address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance]);
+  }, [address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance]);
 
   // Refetch balances when user swaps (after animation completes)
   useEffect(() => {
@@ -966,10 +992,47 @@ export function BridgeInterface() {
       refetchIpBalance();
       refetchIpL2Balance();
       refetchAllowance();
+      refetchL2Allowance();
     }
-  }, [chainId, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance]);
+  }, [chainId, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance]);
 
   // Balance polling is now handled by refetchInterval in the hooks above
+
+  // Handle approval success - automatically continue with bridge transaction
+  useEffect(() => {
+    if (isApproveSuccess && shouldContinueAfterApproval.current && approveTxHash) {
+      // Check if we've already processed this approval
+      if (lastProcessedApprovalHash.current === approveTxHash) {
+        return;
+      }
+      
+      console.log('✅ Approval confirmed! Refetching allowances and continuing with bridge...');
+      
+      // Mark this approval as processed
+      lastProcessedApprovalHash.current = approveTxHash;
+      
+      // Refetch allowances and wait for them to update
+      const refetchAndContinue = async () => {
+        await Promise.all([
+          refetchAllowance(),
+          refetchL2Allowance(),
+        ]);
+        
+        // Reset flag
+        shouldContinueAfterApproval.current = false;
+        
+        // Small delay to ensure state is fully updated, then re-trigger the transaction
+        setTimeout(() => {
+          console.log('🔄 Auto-continuing bridge transaction after approval...');
+          // Call handleTransact which will be available in scope
+          handleTransact();
+        }, 500);
+      };
+      
+      refetchAndContinue();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproveSuccess, approveTxHash]);
 
   // Handle L1 to L2 IP bridge transaction
   useEffect(() => {
@@ -1553,9 +1616,30 @@ export function BridgeInterface() {
       } else {
         // For PSDN, handle both L1->L2 and L2->L1
         if (isL2ToL1) {
-          // L2 -> L1: Use L2Bridge bridgeErc20
-          // Add to pending transactions immediately
-          // L2 -> L1: Use bridgeERC20 on the L2StandardBridge
+          // L2 -> L1: Check approval for L2Bridge contract first
+          console.log('🔍 Checking L2 approval status...');
+          console.log('   Current L2 allowance:', l2Allowance?.toString());
+          console.log('   Required amount:', amount.toString());
+          console.log('   Approval target (L2Bridge):', CONTRACT_ADDRESSES.L2_BRIDGE);
+          
+          const needsL2Approval = !l2Allowance || l2Allowance < amount;
+          console.log('   Needs approval?', needsL2Approval);
+          
+          if (needsL2Approval) {
+            console.log('🔐 Requesting approval for L2Bridge contract:', CONTRACT_ADDRESSES.L2_BRIDGE);
+            // Set flag to auto-continue after approval
+            shouldContinueAfterApproval.current = true;
+            // Approve max amount to avoid future approvals
+            await writeApprove({
+              args: [CONTRACT_ADDRESSES.L2_BRIDGE, BigInt(MAX_UINT256)],
+            });
+            console.log('✅ Approval transaction submitted - waiting for confirmation...');
+            // Note: The actual bridge will happen automatically after approval confirms
+            return;
+          }
+          
+          // If we have approval, proceed with L2 -> L1 bridge
+          console.log('💰 Proceeding with L2->L1 bridge transaction...');
           await writeL2BridgeErc20({
             args: [
               CONTRACT_ADDRESSES.PSDN_L2, // L2 token address
@@ -1580,13 +1664,14 @@ export function BridgeInterface() {
           
           if (needsApproval) {
             console.log('🔐 Requesting approval for Bridge contract:', CONTRACT_ADDRESSES.BRIDGE);
+            // Set flag to auto-continue after approval
+            shouldContinueAfterApproval.current = true;
             // Approve max amount to avoid future approvals
             await writeApprove({
               args: [CONTRACT_ADDRESSES.BRIDGE, BigInt(MAX_UINT256)],
             });
             console.log('✅ Approval transaction submitted - waiting for confirmation...');
-            // Note: The actual deposit will happen after approval is confirmed
-            // User will need to click the button again after approval confirms
+            // Note: The actual deposit will happen automatically after approval confirms
             return;
           }
           
@@ -1611,6 +1696,7 @@ export function BridgeInterface() {
       refetchIpBalance();
       refetchIpL2Balance();
       refetchAllowance();
+      refetchL2Allowance();
     } catch (error) {
       // Only log error if it's not a user cancellation
       if (!isUserRejectedError(error)) {
@@ -1629,7 +1715,7 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, toToken.symbol, activeWithdrawalTxId]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, l2Allowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance, toToken.symbol, activeWithdrawalTxId]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -1884,10 +1970,12 @@ export function BridgeInterface() {
         ) : (
         <button
           onClick={handleTransact}
-          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
+          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || isApproveConfirming}
           className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isTransactionPending ? "Processing..." : (
+          {isApprovePending ? "Approving..." : 
+           isApproveConfirming ? "Confirming Approval..." : 
+           isTransactionPending ? "Processing..." : (
             needsApproval ? "Approve PSDN" : "Bridge"
           )}
         </button>
