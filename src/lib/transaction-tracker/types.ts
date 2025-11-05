@@ -73,6 +73,8 @@ export interface WithdrawalTransaction {
   createdAt: number;            // When transaction was initiated
   updatedAt: number;            // Last status update
   completedAt?: number;         // When transaction completed
+  proofConfirmedAt?: number;    // When proof was confirmed (for challenge period countdown)
+  gameResolvedAt?: number;      // When game was resolved (for finalization countdown)
   
   // Metadata
   l2BlockNumber?: number;       // L2 block number
@@ -94,5 +96,7 @@ export interface TransactionUpdate {
   proofData?: WithdrawalTransaction['proofData'];
   l2BlockNumber?: number;
   completedAt?: number;
+  proofConfirmedAt?: number;
+  gameResolvedAt?: number;
 }
 

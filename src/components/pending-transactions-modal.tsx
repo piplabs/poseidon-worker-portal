@@ -163,25 +163,25 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
             </div>
 
             {/* Transaction List */}
-            <div className="overflow-y-auto max-h-[calc(80vh-120px)] p-4 space-y-3">
+            <div className="overflow-y-auto max-h-[calc(80vh-120px)] p-4 space-y-2">
               {displayTransactions.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Inbox className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No {selectedTab} transactions</p>
+                  <p className="text-sm">No {selectedTab} transactions</p>
                 </div>
               ) : (
                 displayTransactions.map((tx) => {
                   const isL2ToL1 = tx.type === 'L2_TO_L1';
-                  const isClickable = isL2ToL1 && tx.status !== 'completed';
+                  const isClickable = isL2ToL1;
 
                   return (
                     <motion.div
                       key={tx.id}
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`border rounded-lg p-4 space-y-3 bg-background transition-colors ${
+                      className={`relative border border-gray-800/50 rounded-md px-3 py-2 bg-gray-900/30 transition-all ${
                         isClickable
-                          ? 'cursor-pointer hover:bg-accent/50 hover:border-primary/50'
+                          ? 'cursor-pointer hover:bg-gray-800/40 hover:border-gray-700/60'
                           : ''
                       }`}
                       onClick={() => {
@@ -191,83 +191,72 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
                         }
                       }}
                     >
-                      {/* Transaction Header */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            {getStatusIcon(tx.status)}
-                            <span className="font-medium text-sm">
-                              {tx.amount} {tx.token}
-                            </span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                              {tx.type === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
+                      {/* Main Content */}
+                      <div className="flex items-center gap-2.5">
+                        {/* Status Icon */}
+                        <div className="flex-shrink-0">
+                          {getStatusIcon(tx.status)}
+                        </div>
+                        
+                        {/* Amount + Token */}
+                        <span className="font-semibold text-sm text-white flex-shrink-0">
+                          {tx.amount} {tx.token}
+                        </span>
+
+                        {/* Direction Badge */}
+                        <div className="flex-shrink-0">
+                          <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gray-800/80 text-gray-400 border border-gray-700/60 font-medium">
+                            {tx.type === 'L1_TO_L2' ? (
+                              <>L1 <span className="mx-0.5 text-gray-600">→</span> L2</>
+                            ) : (
+                              <>L2 <span className="mx-0.5 text-gray-600">→</span> L1</>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Spacer */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-gray-500 truncate">
                             {getStatusLabel(tx.status)}
                           </p>
-                          {isClickable && (
-                            <p className="text-xs text-primary mt-1">
-                              Click to view details and actions
-                            </p>
-                          )}
                         </div>
-                        <div className="text-right text-xs text-muted-foreground">
-                          {new Date(tx.updatedAt).toLocaleString()}
+
+                        {/* Time + Explorer Link */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className="text-[10px] text-gray-600">
+                            {new Date(tx.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {tx.type === 'L1_TO_L2' && tx.l1TxHash && (
+                            <a
+                              href={getBlockExplorerUrl(tx.l1TxHash, CHAIN_IDS.L1)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-0.5 text-gray-500 hover:text-gray-300 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
                         </div>
                       </div>
 
                       {/* Progress Bar */}
-                      {tx.status !== 'error' && tx.status !== 'completed' && (
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      {tx.status !== 'error' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-800/50 overflow-hidden rounded-b-md">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${getProgress(tx.status)}%` }}
                             transition={{ duration: 0.5 }}
-                            className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                            className="h-full bg-gradient-to-r from-gray-600/60 to-gray-500/60"
                           />
                         </div>
                       )}
 
-                      {/* Completed Progress Bar */}
-                      {tx.status === 'completed' && (
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full w-full bg-gradient-to-r from-blue-500 to-purple-500" />
-                        </div>
-                      )}
-
-                      {/* Error Message */}
+                      {/* Error Indicator */}
                       {tx.errorMessage && (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded p-2">
-                          <p className="text-xs text-red-500">{tx.errorMessage}</p>
-                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-500/60 rounded-b-md" />
                       )}
-
-                      {/* Transaction Links - Only show basic info */}
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        {tx.type === 'L1_TO_L2' && tx.l1TxHash && (
-                          <a
-                            href={getBlockExplorerUrl(tx.l1TxHash, CHAIN_IDS.L1)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-primary hover:underline"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            View on Explorer <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                        {tx.type === 'L2_TO_L1' && tx.l2TxHash && (
-                          <a
-                            href={getBlockExplorerUrl(tx.l2TxHash, CHAIN_IDS.L2)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-primary hover:underline"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            View L2 Transaction <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
                     </motion.div>
                   );
                 })

@@ -344,7 +344,11 @@ export function BridgeInterface() {
       setMonitoredResolveGameTxHash(null);
       
       // Update status to game_resolved - this enables the finalize button
-      TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+      TransactionStorage.update({ 
+        id: tx.id, 
+        status: 'game_resolved',
+        gameResolvedAt: Date.now(), // Store timestamp for finalization countdown
+      });
       
       console.log('\n🎯 Step 6 Ready: Game resolved, ready for finalization');
       console.log('   User must click the "Get" button in the withdrawal modal to finalize and receive tokens');
@@ -594,6 +598,7 @@ export function BridgeInterface() {
           id: tx.id, 
           status: 'proof_confirmed',
           l1ProofTxHash: proofTxHash as string,
+          proofConfirmedAt: Date.now(), // Store timestamp for countdown calculation
         });
         
         console.log('\n🎯 Step 5 Ready: Proof confirmed, challenge period starting');
@@ -826,6 +831,20 @@ export function BridgeInterface() {
     },
   });
 
+  // Monitor L2 bridge errors and clean up temp transaction on rejection
+  useEffect(() => {
+    const l2Error = l2BridgeErc20Error || l2BridgeEthError;
+    if (l2Error && isUserRejectedError(l2Error)) {
+      // User rejected the L2->L1 transaction, clean up temp transaction
+      if (activeWithdrawalTxId && activeWithdrawalTxId.startsWith('temp-')) {
+        console.log('ℹ️ User cancelled L2 transaction - cleaning up and closing modal');
+        TransactionStorage.delete(activeWithdrawalTxId);
+        setIsWithdrawalModalOpen(false);
+        setActiveWithdrawalTxId(null);
+      }
+    }
+  }, [l2BridgeErc20Error, l2BridgeEthError, activeWithdrawalTxId]);
+
   // Wait for approval transaction confirmation
   const { isSuccess: isApproveSuccess, isLoading: isApproveConfirming } = useWaitForTransactionReceipt({
     hash: approveTxHash as `0x${string}`,
@@ -1052,13 +1071,7 @@ export function BridgeInterface() {
     // Process each in-progress withdrawal
     inProgressWithdrawals.forEach(tx => {
       console.log(`\n📋 Resuming transaction ${tx.id} (status: ${tx.status})`);
-      
-      // Auto-open modal for the most recent transaction
-      if (tx === inProgressWithdrawals[0]) {
-        setActiveWithdrawalTxId(tx.id);
-        setIsWithdrawalModalOpen(true);
-        console.log('   ✅ Opened withdrawal modal');
-      }
+      console.log('   💡 User can access this transaction via the Pending Transactions tab');
       
       // Resume background processes based on status
       switch (tx.status) {
