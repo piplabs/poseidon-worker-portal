@@ -105,7 +105,7 @@ export function formatTransactionError(error: unknown): string | null {
 
 /**
  * Log error to console only if it's not a user cancellation
- * @param context - Context string for the error (e.g., "Bridge ETH")
+ * @param context - Context string for the error (e.g., "Bridge IP")
  * @param error - The error to log
  */
 export function logTransactionError(context: string, error: unknown): void {

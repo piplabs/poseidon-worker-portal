@@ -17,6 +17,7 @@ import {
   useWriteSubnetControlPlaneClaimRewardsFor
 } from "@/generated";
 import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { parseUnits, formatUnits } from "viem";
 import { motion } from "motion/react";
 import { CHAIN_IDS, MAX_UINT256, CONTRACT_ADDRESSES } from "@/lib/constants";
@@ -31,6 +32,7 @@ export default function Home() {
   const { address } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
   
   const isOnL2 = chainId === CHAIN_IDS.L2;
   
@@ -117,7 +119,11 @@ export default function Home() {
   } = useWriteSubnetControlPlaneClaimRewardsFor();
 
   const handleMint = async () => {
-    if (!address || !mintAmount) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    if (!mintAmount) return;
     
     try {
       const amount = parseUnits(mintAmount, 18);
@@ -132,7 +138,10 @@ export default function Home() {
   };
 
   const handleApproveStake = async () => {
-    if (!address) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
     
     try {
       console.log('🔐 Approving PSDN_L2 for staking operations...');
@@ -150,7 +159,11 @@ export default function Home() {
   };
 
   const handleRegisterWorker = async () => {
-    if (!address || !stakeAmount) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    if (!stakeAmount) return;
     
     try {
       const amount = parseUnits(stakeAmount, 18);
@@ -165,7 +178,10 @@ export default function Home() {
   };
 
   const handleRequestUnstake = async () => {
-    if (!address) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
     
     try {
       await writeRequestUnstake({
@@ -179,7 +195,10 @@ export default function Home() {
   };
 
   const handleWithdrawStake = async () => {
-    if (!address) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
     
     try {
       await writeWithdrawStake({
@@ -193,7 +212,11 @@ export default function Home() {
   };
 
   const handleClaimRewards = async () => {
-    if (!address || !rewardEpochId) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    if (!rewardEpochId) return;
     
     try {
       const epochId = BigInt(rewardEpochId);
@@ -547,7 +570,7 @@ export default function Home() {
                           {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
                             <button
                               onClick={handleApproveStake}
-                              disabled={!address || isApproveStakePending}
+                              disabled={isApproveStakePending}
                               className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {isApproveStakePending ? "Approving..." : "Approve PSDN"}
@@ -555,7 +578,7 @@ export default function Home() {
                           ) : (
                             <button
                               onClick={handleRegisterWorker}
-                              disabled={!address || isRegisterWorkerPending || !stakeAmount}
+                              disabled={isRegisterWorkerPending || !stakeAmount}
                               className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {isRegisterWorkerPending ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
@@ -565,15 +588,6 @@ export default function Home() {
                       )}
 
                       {/* Status Messages */}
-                      {!address && (
-                        <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                          <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                          <span className="text-amber-700 dark:text-amber-300 text-xs">
-                            Connect wallet to register
-                          </span>
-                        </div>
-                      )}
-
                       {approveStakeError && formatTransactionError(approveStakeError) && (
                         <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
                           <p className="text-destructive text-xs font-medium">
@@ -673,7 +687,7 @@ export default function Home() {
                       ) : (
                         <button
                           onClick={handleClaimRewards}
-                          disabled={!address || isClaimRewardsPending || !rewardEpochId}
+                          disabled={isClaimRewardsPending || !rewardEpochId}
                           className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isClaimRewardsPending ? "Claiming..." : isClaimRewardsSuccess ? "Claimed!" : "Claim Rewards"}
@@ -681,15 +695,6 @@ export default function Home() {
                       )}
 
                       {/* Status Messages */}
-                      {!address && (
-                        <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                          <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                          <span className="text-amber-700 dark:text-amber-300 text-xs">
-                            Connect wallet to claim
-                          </span>
-                        </div>
-                      )}
-
                       {claimRewardsError && formatTransactionError(claimRewardsError) && (
                         <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
                           <p className="text-destructive text-xs font-medium">
@@ -762,7 +767,7 @@ export default function Home() {
                                 {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
                                   <button
                                     onClick={handleRequestUnstake}
-                                    disabled={!address || isRequestUnstakePending}
+                                    disabled={isRequestUnstakePending}
                                     className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     {isRequestUnstakePending ? (
@@ -837,7 +842,7 @@ export default function Home() {
                                 {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
                                   <button
                                     onClick={handleWithdrawStake}
-                                    disabled={!address || isWithdrawStakePending}
+                                    disabled={isWithdrawStakePending}
                                     className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     {isWithdrawStakePending ? (
@@ -903,15 +908,6 @@ export default function Home() {
                         </button>
                       )}
 
-                      {/* Wallet Connection Status */}
-                      {!address && (
-                        <div className="flex items-center space-x-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                          <span className="text-gray-400 text-xs">
-                            Connect wallet to unstake
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </motion.div>
                 </div>
@@ -998,7 +994,7 @@ export default function Home() {
               ) : (
                 <button
                   onClick={handleMint}
-                  disabled={!address || isPending || !mintAmount}
+                  disabled={isPending || !mintAmount}
                   className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isPending ? "Minting..." : isSuccess ? "Minted!" : "Mint"}
@@ -1023,15 +1019,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Wallet Connection Status */}
-              {!address && (
-                <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span className="text-amber-700 dark:text-amber-300 text-sm font-medium">
-                    Please connect your wallet to mint tokens
-                  </span>
-                </div>
-              )}
             </div>
 
           </motion.div>

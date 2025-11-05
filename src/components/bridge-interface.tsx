@@ -34,8 +34,8 @@ import {
   type Token,
   PSDN_L1_TOKEN,
   PSDN_L2_TOKEN,
-  ETH_L1_TOKEN,
-  ETH_L2_TOKEN,
+  IP_L1_TOKEN,
+  IP_L2_TOKEN,
   DEFAULT_FROM_TOKEN,
   DEFAULT_TO_TOKEN,
   DEFAULT_BRIDGE_OPTION,
@@ -796,9 +796,9 @@ export function BridgeInterface() {
   // Note: This effect is intentionally minimal - swapping should NOT trigger token changes
   useEffect(() => {
     // Only update if we're in the default L1->L2 direction AND the current token doesn't match the bridge option
-    if (isL1OnTop && fromToken.symbol !== (bridgeOption === 'psdn' ? 'PSDN' : 'ETH')) {
-      const newFromToken = bridgeOption === 'psdn' ? PSDN_L1_TOKEN : ETH_L1_TOKEN;
-      const newToToken = bridgeOption === 'psdn' ? PSDN_L2_TOKEN : ETH_L2_TOKEN;
+    if (isL1OnTop && fromToken.symbol !== (bridgeOption === 'psdn' ? 'PSDN' : 'IP')) {
+      const newFromToken = bridgeOption === 'psdn' ? PSDN_L1_TOKEN : IP_L1_TOKEN;
+      const newToToken = bridgeOption === 'psdn' ? PSDN_L2_TOKEN : IP_L2_TOKEN;
       
       // Only update if this is actually a change from the user selecting a different token
       // Don't update if the user has swapped to L2->L1 (this would force unwanted changes)
@@ -832,7 +832,7 @@ export function BridgeInterface() {
     chainId: CHAIN_IDS.L2,
   });
 
-  const { data: ethBalance, refetch: refetchEthBalance, isLoading: isEthBalanceLoading } = useBalance({
+  const { data: ipBalance, refetch: refetchIpBalance, isLoading: isIpBalanceLoading } = useBalance({
     address,
     chainId: CHAIN_IDS.L1,
     query: {
@@ -843,7 +843,7 @@ export function BridgeInterface() {
     },
   });
 
-  const { data: ethL2Balance, refetch: refetchEthL2Balance, isLoading: isEthL2BalanceLoading } = useBalance({
+  const { data: ipL2Balance, refetch: refetchIpL2Balance, isLoading: isIpL2BalanceLoading } = useBalance({
     address,
     chainId: CHAIN_IDS.L2,
     query: {
@@ -899,36 +899,36 @@ export function BridgeInterface() {
   }, [psdnL2Balance]);
 
   useEffect(() => {
-    if (ethBalance !== undefined) {
-      const balanceStr = formatBalanceFromValue(ethBalance);
+    if (ipBalance !== undefined) {
+      const balanceStr = formatBalanceFromValue(ipBalance);
       setFromToken(prev => 
-        prev.symbol === 'ETH' && prev.layer === 'L1' 
+        prev.symbol === 'IP' && prev.layer === 'L1' 
           ? { ...prev, balance: balanceStr } 
           : prev
       );
       setToToken(prev => 
-        prev.symbol === 'ETH' && prev.layer === 'L1' 
+        prev.symbol === 'IP' && prev.layer === 'L1' 
           ? { ...prev, balance: balanceStr } 
           : prev
       );
     }
-  }, [ethBalance]);
+  }, [ipBalance]);
 
   useEffect(() => {
-    if (ethL2Balance !== undefined) {
-      const balanceStr = formatBalanceFromValue(ethL2Balance);
+    if (ipL2Balance !== undefined) {
+      const balanceStr = formatBalanceFromValue(ipL2Balance);
       setFromToken(prev => 
-        prev.symbol === 'ETH' && prev.layer === 'L2' 
+        prev.symbol === 'IP' && prev.layer === 'L2' 
           ? { ...prev, balance: balanceStr } 
           : prev
       );
       setToToken(prev => 
-        prev.symbol === 'ETH' && prev.layer === 'L2' 
+        prev.symbol === 'IP' && prev.layer === 'L2' 
           ? { ...prev, balance: balanceStr } 
           : prev
       );
     }
-  }, [ethL2Balance]);
+  }, [ipL2Balance]);
 
   // Force refetch balances when wallet connects or changes
   useEffect(() => {
@@ -936,11 +936,11 @@ export function BridgeInterface() {
       console.log('💰 Wallet connected, fetching all balances...');
       refetchPsdnBalance();
       refetchPsdnL2Balance();
-      refetchEthBalance();
-      refetchEthL2Balance();
+      refetchIpBalance();
+      refetchIpL2Balance();
       refetchAllowance();
     }
-  }, [address, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+  }, [address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance]);
 
   // Refetch balances when user swaps (after animation completes)
   useEffect(() => {
@@ -950,12 +950,12 @@ export function BridgeInterface() {
         console.log('🔄 Swap complete, refreshing balances...');
         refetchPsdnBalance();
         refetchPsdnL2Balance();
-        refetchEthBalance();
-        refetchEthL2Balance();
+        refetchIpBalance();
+        refetchIpL2Balance();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isSwapping, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance]);
+  }, [isSwapping, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance]);
 
   // Refetch balances when network changes
   useEffect(() => {
@@ -963,15 +963,15 @@ export function BridgeInterface() {
       console.log(`🌐 Network changed to ${chainId}, refreshing balances...`);
       refetchPsdnBalance();
       refetchPsdnL2Balance();
-      refetchEthBalance();
-      refetchEthL2Balance();
+      refetchIpBalance();
+      refetchIpL2Balance();
       refetchAllowance();
     }
-  }, [chainId, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance]);
+  }, [chainId, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance]);
 
   // Balance polling is now handled by refetchInterval in the hooks above
 
-  // Handle L1 to L2 ETH bridge transaction
+  // Handle L1 to L2 IP bridge transaction
   useEffect(() => {
     if (bridgeEthTxData && address) {
       const existingTx = TransactionStorage.getById(bridgeEthTxData);
@@ -982,11 +982,11 @@ export function BridgeInterface() {
           l1TxHash: bridgeEthTxData,
           status: 'pending',
           type: 'L1_TO_L2',
-          token: 'ETH',
+          token: 'IP',
           amount: fromAmount,
           fromAddress: address,
         });
-        console.log(`📝 Created L1→L2 ETH transaction record: ${bridgeEthTxData}`);
+        console.log(`📝 Created L1→L2 IP transaction record: ${bridgeEthTxData}`);
       }
     }
   }, [bridgeEthTxData, address, fromAmount]);
@@ -1011,7 +1011,7 @@ export function BridgeInterface() {
     }
   }, [depositErc20TxData, address, fromAmount]);
 
-  // Wait for L1 to L2 ETH transaction confirmation
+  // Wait for L1 to L2 IP transaction confirmation
   const { isSuccess: isBridgeEthConfirmed } = useWaitForTransactionReceipt({
     hash: bridgeEthTxData as `0x${string}`,
     chainId: CHAIN_IDS.L1,
@@ -1023,7 +1023,7 @@ export function BridgeInterface() {
     chainId: CHAIN_IDS.L1,
   });
 
-  // Mark L1 to L2 ETH transaction as completed
+  // Mark L1 to L2 IP transaction as completed
   useEffect(() => {
     if (isBridgeEthConfirmed && bridgeEthTxData) {
       const tx = TransactionStorage.getById(bridgeEthTxData);
@@ -1033,7 +1033,7 @@ export function BridgeInterface() {
           status: 'completed',
           completedAt: Date.now(),
         });
-        console.log(`✅ L1→L2 ETH transaction completed: ${bridgeEthTxData}`);
+        console.log(`✅ L1→L2 IP transaction completed: ${bridgeEthTxData}`);
       }
     }
   }, [isBridgeEthConfirmed, bridgeEthTxData]);
@@ -1109,7 +1109,7 @@ export function BridgeInterface() {
     }
   }, [l2TxData, address, fromAmount]);
 
-  // Handle L2 to L1 ETH transaction hash when it becomes available
+  // Handle L2 to L1 IP transaction hash when it becomes available
   useEffect(() => {
     if (l2EthTxData && address) {
       // Check if transaction already exists to prevent duplicates
@@ -1118,7 +1118,7 @@ export function BridgeInterface() {
       if (!existingTx) {
         // Look for temporary transaction and update it
         const allTxs = TransactionStorage.getAll();
-        const tempTx = allTxs.find(tx => tx.id.startsWith('temp-') && !tx.l2TxHash && tx.type === 'L2_TO_L1' && tx.token === 'ETH');
+        const tempTx = allTxs.find(tx => tx.id.startsWith('temp-') && !tx.l2TxHash && tx.type === 'L2_TO_L1' && tx.token === 'IP');
         
         if (tempTx) {
           // Delete temporary transaction
@@ -1130,12 +1130,12 @@ export function BridgeInterface() {
             l2TxHash: l2EthTxData,
             status: 'pending',
             type: 'L2_TO_L1',
-            token: 'ETH',
+            token: 'IP',
             amount: fromAmount,
             fromAddress: address,
           });
           
-          console.log(`📝 Updated temp transaction to real L2→L1 ETH transaction: ${l2EthTxData}`);
+          console.log(`📝 Updated temp transaction to real L2→L1 IP transaction: ${l2EthTxData}`);
           
           // Update active withdrawal ID to the real transaction hash
           setActiveWithdrawalTxId(l2EthTxData);
@@ -1146,12 +1146,12 @@ export function BridgeInterface() {
             l2TxHash: l2EthTxData,
             status: 'pending',
             type: 'L2_TO_L1',
-            token: 'ETH',
+            token: 'IP',
             amount: fromAmount,
             fromAddress: address,
           });
           
-          console.log(`📝 Created L2→L1 ETH transaction record: ${l2EthTxData}`);
+          console.log(`📝 Created L2→L1 IP transaction record: ${l2EthTxData}`);
           
           // Open withdrawal modal for this transaction
           setActiveWithdrawalTxId(l2EthTxData);
@@ -1244,12 +1244,12 @@ export function BridgeInterface() {
   }, [fromAmount]);
 
   const handleMaxClick = useCallback(() => {
-    const maxBalance = getTokenBalance(fromToken, psdnBalance, psdnL2Balance, ethBalance, ethL2Balance);
+    const maxBalance = getTokenBalance(fromToken, psdnBalance, psdnL2Balance, ipBalance, ipL2Balance);
     if (maxBalance) {
       setFromAmount(maxBalance);
       setToAmount(maxBalance);
     }
-  }, [fromToken, psdnBalance, psdnL2Balance, ethBalance, ethL2Balance]);
+  }, [fromToken, psdnBalance, psdnL2Balance, ipBalance, ipL2Balance]);
 
   const handleToAmountBlur = useCallback(() => {
     setToAmount(formatAmountOnBlur(toAmount));
@@ -1269,8 +1269,8 @@ export function BridgeInterface() {
       selectedToken,
       psdnBalance,
       psdnL2Balance,
-      ethBalance,
-      ethL2Balance
+      ipBalance,
+      ipL2Balance
     );
     
     const updatedFromToken = { ...selectedToken, balance: balanceStr };
@@ -1282,14 +1282,14 @@ export function BridgeInterface() {
       if (selectedToken.symbol === 'PSDN') {
         updatedToToken = { ...PSDN_L2_TOKEN, balance: formatBalance(psdnL2Balance) };
       } else {
-        updatedToToken = { ...ETH_L2_TOKEN, balance: formatBalanceFromValue(ethL2Balance) };
+        updatedToToken = { ...IP_L2_TOKEN, balance: formatBalanceFromValue(ipL2Balance) };
       }
     } else {
       // If L2 is selected, set corresponding L1 token
       if (selectedToken.symbol === 'PSDN') {
         updatedToToken = { ...PSDN_L1_TOKEN, balance: formatBalance(psdnBalance) };
       } else {
-        updatedToToken = { ...ETH_L1_TOKEN, balance: formatBalanceFromValue(ethBalance) };
+        updatedToToken = { ...IP_L1_TOKEN, balance: formatBalanceFromValue(ipBalance) };
       }
     }
     
@@ -1297,7 +1297,7 @@ export function BridgeInterface() {
     setFromToken(updatedFromToken);
     setToToken(updatedToToken);
     setIsTokenSelectorOpen(false);
-  }, [psdnBalance, psdnL2Balance, ethBalance, ethL2Balance]);
+  }, [psdnBalance, psdnL2Balance, ipBalance, ipL2Balance]);
 
 
   // Handlers for withdrawal modal actions
@@ -1535,8 +1535,8 @@ export function BridgeInterface() {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      if (fromToken.symbol === 'ETH') {
-        // For ETH, handle both L1->L2 and L2->L1
+      if (fromToken.symbol === 'IP') {
+        // For IP, handle both L1->L2 and L2->L1
         if (isL2ToL1) {
           // L2 -> L1: Use L2Bridge bridgeETH
           await writeL2BridgeEth({
@@ -1608,8 +1608,8 @@ export function BridgeInterface() {
       // Refresh all balances after successful transaction
       refetchPsdnBalance();
       refetchPsdnL2Balance();
-      refetchEthBalance();
-      refetchEthL2Balance();
+      refetchIpBalance();
+      refetchIpL2Balance();
       refetchAllowance();
     } catch (error) {
       // Only log error if it's not a user cancellation
@@ -1629,14 +1629,14 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchEthBalance, refetchEthL2Balance, refetchAllowance, toToken.symbol, activeWithdrawalTxId]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, toToken.symbol, activeWithdrawalTxId]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
     isL1OnTop 
-      ? getAvailableL1Tokens(psdnBalance, ethBalance)
-      : getAvailableL2Tokens(psdnL2Balance, ethL2Balance),
-    [isL1OnTop, psdnBalance, ethBalance, psdnL2Balance, ethL2Balance]
+      ? getAvailableL1Tokens(psdnBalance, ipBalance)
+      : getAvailableL2Tokens(psdnL2Balance, ipL2Balance),
+    [isL1OnTop, psdnBalance, ipBalance, psdnL2Balance, ipL2Balance]
   );
 
   const isTransactionPending = useMemo(() =>
