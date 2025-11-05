@@ -8,8 +8,8 @@ import {
   ZERO_AMOUNT,
   PSDN_L1_TOKEN,
   PSDN_L2_TOKEN,
-  ETH_L1_TOKEN,
-  ETH_L2_TOKEN,
+  IP_L1_TOKEN,
+  IP_L2_TOKEN,
   type Token,
 } from "./constants";
 
@@ -31,18 +31,18 @@ export const formatBalanceFromValue = (balance: { value: bigint } | undefined): 
 
 export const getAvailableL1Tokens = (
   psdnBalance: bigint | undefined,
-  ethBalance: { value: bigint } | undefined
+  ipBalance: { value: bigint } | undefined
 ): Token[] => [
   { ...PSDN_L1_TOKEN, balance: formatBalance(psdnBalance) },
-  { ...ETH_L1_TOKEN, balance: formatBalanceFromValue(ethBalance) },
+  { ...IP_L1_TOKEN, balance: formatBalanceFromValue(ipBalance) },
 ];
 
 export const getAvailableL2Tokens = (
   psdnL2Balance: bigint | undefined,
-  ethL2Balance: { value: bigint } | undefined
+  ipL2Balance: { value: bigint } | undefined
 ): Token[] => [
   { ...PSDN_L2_TOKEN, balance: formatBalance(psdnL2Balance) },
-  { ...ETH_L2_TOKEN, balance: formatBalanceFromValue(ethL2Balance) },
+  { ...IP_L2_TOKEN, balance: formatBalanceFromValue(ipL2Balance) },
 ];
 
 export const formatAmount = (amount: string): string => {
@@ -70,17 +70,17 @@ export const getTokenBalance = (
   token: Token,
   psdnBalance: bigint | undefined,
   psdnL2Balance: bigint | undefined,
-  ethBalance: { value: bigint } | undefined,
-  ethL2Balance: { value: bigint } | undefined
+  ipBalance: { value: bigint } | undefined,
+  ipL2Balance: { value: bigint } | undefined
 ): string => {
   if (token.symbol === 'PSDN') {
     return token.layer === 'L1' 
       ? formatBalance(psdnBalance)
       : formatBalance(psdnL2Balance);
-  } else if (token.symbol === 'ETH') {
+  } else if (token.symbol === 'IP') {
     return token.layer === 'L1' 
-      ? formatBalanceFromValue(ethBalance)
-      : formatBalanceFromValue(ethL2Balance);
+      ? formatBalanceFromValue(ipBalance)
+      : formatBalanceFromValue(ipL2Balance);
   }
   return DEFAULT_BALANCE;
 };
