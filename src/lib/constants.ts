@@ -32,7 +32,7 @@ export const DECIMAL_PLACES = {
   BALANCE: 2,
   AMOUNT: 2,
 } as const;
-export type BridgeOption = 'psdn' | 'eth';
+export type BridgeOption = 'psdn' | 'ip';
 export interface Token {
   symbol: string;
   name: string;
@@ -59,20 +59,20 @@ export const PSDN_L2_TOKEN: Token = {
   layer: "L2",
 };
 
-export const ETH_L1_TOKEN: Token = {
-  symbol: "ETH",
-  name: "Ethereum L1",
+export const IP_L1_TOKEN: Token = {
+  symbol: "IP",
+  name: "IP L1",
   balance: ZERO_AMOUNT,
-  logo: "Ξ",
+  logo: "IP",
   color: "bg-black",
   layer: "L1",
 };
 
-export const ETH_L2_TOKEN: Token = {
-  symbol: "ETH",
-  name: "Ethereum Proteus",
+export const IP_L2_TOKEN: Token = {
+  symbol: "IP",
+  name: "IP Proteus",
   balance: ZERO_AMOUNT,
-  logo: "Ξ",
+  logo: "IP",
   color: "bg-black",
   layer: "L2",
 };
