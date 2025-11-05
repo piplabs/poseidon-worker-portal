@@ -855,7 +855,7 @@ export function BridgeInterface() {
   });
 
   const { data: currentAllowance, refetch: refetchAllowance } = useReadMintPsdnAllowance({
-    args: address ? [address, CONTRACT_ADDRESSES.APPROVAL_TARGET] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.BRIDGE] : undefined,
     query: { 
       enabled: !!address,
       refetchInterval: POLLING_INTERVAL,
@@ -1573,16 +1573,16 @@ export function BridgeInterface() {
           console.log('🔍 Checking approval status...');
           console.log('   Current allowance:', currentAllowance?.toString());
           console.log('   Required amount:', amount.toString());
-          console.log('   Approval target:', CONTRACT_ADDRESSES.APPROVAL_TARGET);
+          console.log('   Approval target (Bridge):', CONTRACT_ADDRESSES.BRIDGE);
           
           const needsApproval = !currentAllowance || currentAllowance < amount;
           console.log('   Needs approval?', needsApproval);
           
           if (needsApproval) {
-            console.log('🔐 Requesting approval for', CONTRACT_ADDRESSES.APPROVAL_TARGET);
+            console.log('🔐 Requesting approval for Bridge contract:', CONTRACT_ADDRESSES.BRIDGE);
             // Approve max amount to avoid future approvals
             await writeApprove({
-              args: [CONTRACT_ADDRESSES.APPROVAL_TARGET, BigInt(MAX_UINT256)],
+              args: [CONTRACT_ADDRESSES.BRIDGE, BigInt(MAX_UINT256)],
             });
             console.log('✅ Approval transaction submitted - waiting for confirmation...');
             // Note: The actual deposit will happen after approval is confirmed
