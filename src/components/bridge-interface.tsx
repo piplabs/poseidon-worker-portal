@@ -81,6 +81,12 @@ export function BridgeInterface() {
   const [activeWithdrawalTxId, setActiveWithdrawalTxId] = useState<string | null>(null);
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   
+  // Track transaction hashes for monitoring (can be restored from localStorage)
+  const [monitoredProofTxHash, setMonitoredProofTxHash] = useState<string | null>(null);
+  const [monitoredResolveClaimsTxHash, setMonitoredResolveClaimsTxHash] = useState<string | null>(null);
+  const [monitoredResolveGameTxHash, setMonitoredResolveGameTxHash] = useState<string | null>(null);
+  const [monitoredFinalizeTxHash, setMonitoredFinalizeTxHash] = useState<string | null>(null);
+  
   // Track which transactions are currently being processed to prevent duplicates
   const processingTxs = useRef<Set<string>>(new Set());
   
@@ -150,24 +156,24 @@ export function BridgeInterface() {
     });
   }, [chainId, switchChainAsync, writeProofContract, addNotification]);
 
-  // Wait for proof transaction confirmation
+  // Wait for proof transaction confirmation (use monitored hash or fresh hash from writeContract)
   const { isLoading: isProofConfirming, isSuccess: isProofConfirmed } = useWaitForTransactionReceipt({
-    hash: proofTxHash,
+    hash: (monitoredProofTxHash || proofTxHash) as `0x${string}` | undefined,
   });
 
   // Wait for resolve claims transaction confirmation
   const { isLoading: isResolveClaimsConfirming, isSuccess: isResolveClaimsConfirmed, error: resolveClaimsError } = useWaitForTransactionReceipt({
-    hash: resolveClaimsTxHash,
+    hash: (monitoredResolveClaimsTxHash || resolveClaimsTxHash) as `0x${string}` | undefined,
   });
 
   // Wait for resolve game transaction confirmation
   const { isLoading: isResolveGameConfirming, isSuccess: isResolveGameConfirmed, error: resolveGameError } = useWaitForTransactionReceipt({
-    hash: resolveGameTxHash,
+    hash: (monitoredResolveGameTxHash || resolveGameTxHash) as `0x${string}` | undefined,
   });
 
   // Wait for finalize transaction confirmation
   const { isLoading: isFinalizeConfirming, isSuccess: isFinalizeConfirmed, error: finalizeError } = useWaitForTransactionReceipt({
-    hash: finalizeTxHash,
+    hash: (monitoredFinalizeTxHash || finalizeTxHash) as `0x${string}` | undefined,
   });
 
   // Use imported finalizeWithdrawal function
@@ -204,6 +210,9 @@ export function BridgeInterface() {
   useEffect(() => {
     if (resolveClaimsTxHash) {
       console.log(`\n✅ Resolve Claims Transaction Submitted: ${resolveClaimsTxHash}`);
+      
+      // Set monitored hash for persistence across page reloads
+      setMonitoredResolveClaimsTxHash(resolveClaimsTxHash);
       
       // Update status to resolving_game when transaction hash is available (user confirmed in wallet)
       if (proofSubmissionData) {
@@ -242,6 +251,9 @@ export function BridgeInterface() {
         console.log(`🛑 Transaction ${tx.id} is ${tx.status}, skipping status update`);
         return;
       }
+      
+      // Clear monitored hash since transaction is confirmed
+      setMonitoredResolveClaimsTxHash(null);
       
       // Update status to resolving_game - this enables the "Resolve Game" button
       TransactionStorage.update({ id: tx.id, status: 'resolving_game' });
@@ -282,6 +294,9 @@ export function BridgeInterface() {
   useEffect(() => {
     if (resolveGameTxHash) {
       console.log(`\n✅ Resolve Game Transaction Submitted: ${resolveGameTxHash}`);
+      
+      // Set monitored hash for persistence across page reloads
+      setMonitoredResolveGameTxHash(resolveGameTxHash);
       
       // Update transaction storage
       if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
@@ -325,6 +340,9 @@ export function BridgeInterface() {
         return;
       }
       
+      // Clear monitored hash since transaction is confirmed
+      setMonitoredResolveGameTxHash(null);
+      
       // Update status to game_resolved - this enables the finalize button
       TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
       
@@ -366,6 +384,9 @@ export function BridgeInterface() {
   useEffect(() => {
     if (finalizeTxHash) {
       console.log(`\n✅ Finalize Withdrawal Transaction Submitted: ${finalizeTxHash}`);
+      
+      // Set monitored hash for persistence across page reloads
+      setMonitoredFinalizeTxHash(finalizeTxHash);
       
       // Update status to finalizing when transaction hash is available (user confirmed in wallet)
       if (proofSubmissionData) {
@@ -409,6 +430,9 @@ export function BridgeInterface() {
       
       console.log('\n✅ Finalize Withdrawal Transaction Confirmed!');
       console.log('🎉 Withdrawal process completed successfully!');
+      
+      // Clear monitored hash since transaction is confirmed
+      setMonitoredFinalizeTxHash(null);
       
       // Mark transaction as completed
       TransactionStorage.update({ 
@@ -460,6 +484,9 @@ export function BridgeInterface() {
   useEffect(() => {
     if (proofTxHash) {
       console.log(`\n✅ Proof Transaction Submitted: ${proofTxHash}`);
+      
+      // Set monitored hash for persistence across page reloads
+      setMonitoredProofTxHash(proofTxHash);
 
       // Update status to proof_submitted when transaction hash is available (user confirmed in wallet)
       // Try to find the transaction using either proofSubmissionData or activeWithdrawalTxId
@@ -556,6 +583,9 @@ export function BridgeInterface() {
       }
       
       console.log('\n✅ Step 4.5 Complete: Proof transaction confirmed!');
+      
+      // Clear monitored hash since transaction is confirmed
+      setMonitoredProofTxHash(null);
       
       // Update transaction status to proof_confirmed
       // This enables the challenge period countdown and prepares for user to click "Resolve"
@@ -997,6 +1027,211 @@ export function BridgeInterface() {
   }, [chainId, address, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance]);
 
   // Balance polling is now handled by refetchInterval in the hooks above
+
+  // Resume in-progress transactions on page load
+  useEffect(() => {
+    if (!address) return;
+    
+    console.log('🔄 Checking for in-progress transactions on page load...');
+    
+    const allTransactions = TransactionStorage.getAll();
+    const inProgressWithdrawals = allTransactions.filter(tx => 
+      tx.type === 'L2_TO_L1' && 
+      tx.fromAddress.toLowerCase() === address.toLowerCase() &&
+      tx.status !== 'completed' &&
+      tx.status !== 'error'
+    );
+    
+    if (inProgressWithdrawals.length === 0) {
+      console.log('   No in-progress withdrawals found');
+      return;
+    }
+    
+    console.log(`   Found ${inProgressWithdrawals.length} in-progress withdrawal(s)`);
+    
+    // Process each in-progress withdrawal
+    inProgressWithdrawals.forEach(tx => {
+      console.log(`\n📋 Resuming transaction ${tx.id} (status: ${tx.status})`);
+      
+      // Auto-open modal for the most recent transaction
+      if (tx === inProgressWithdrawals[0]) {
+        setActiveWithdrawalTxId(tx.id);
+        setIsWithdrawalModalOpen(true);
+        console.log('   ✅ Opened withdrawal modal');
+      }
+      
+      // Resume background processes based on status
+      switch (tx.status) {
+        case 'pending':
+        case 'l2_confirmed':
+        case 'waiting_game':
+          // These early stages will be handled by existing monitoring useEffects
+          // Just check if we need to resume waiting for dispute game
+          if (tx.l2TxHash && tx.l2BlockNumber && tx.withdrawalDetails) {
+            console.log('   🔄 Checking for dispute game...');
+            // Try to find if a game is now available
+            waitForDisputeGame(tx.l2BlockNumber)
+              .then(disputeGame => {
+                console.log('✅ Dispute game found');
+                TransactionStorage.update({ 
+                  id: tx.id, 
+                  status: 'game_found',
+                  disputeGame
+                });
+                
+                // Start proof generation
+                console.log('   🔄 Starting proof generation...');
+                return generateProof(tx.withdrawalDetails!, tx.l2BlockNumber!, disputeGame);
+              })
+              .then(proofData => {
+                console.log('✅ Proof generated successfully');
+                const updatedTx = TransactionStorage.getById(tx.id);
+                TransactionStorage.update({ 
+                  id: tx.id, 
+                  status: 'proof_generated',
+                  proofData
+                });
+                
+                if (updatedTx && updatedTx.disputeGame && updatedTx.withdrawalDetails) {
+                  setProofSubmissionData({
+                    withdrawalDetails: updatedTx.withdrawalDetails,
+                    disputeGame: updatedTx.disputeGame,
+                    proofData,
+                  });
+                }
+              })
+              .catch((error: Error) => {
+                if (error.message.includes('No suitable game found')) {
+                  console.log('   ⏳ Still waiting for dispute game...');
+                } else {
+                  console.error('Error checking for dispute game:', error);
+                }
+              });
+          }
+          break;
+          
+        case 'game_found':
+        case 'generating_proof':
+          // Resume or restart proof generation
+          if (tx.withdrawalDetails && tx.l2BlockNumber && tx.disputeGame) {
+            console.log('   🔄 Generating proof...');
+            generateProof(tx.withdrawalDetails, tx.l2BlockNumber, tx.disputeGame)
+              .then(proofData => {
+                console.log('✅ Proof generated successfully');
+                TransactionStorage.update({ 
+                  id: tx.id, 
+                  status: 'proof_generated',
+                  proofData
+                });
+                
+                setProofSubmissionData({
+                  withdrawalDetails: tx.withdrawalDetails!,
+                  disputeGame: tx.disputeGame!,
+                  proofData,
+                });
+              })
+              .catch((error: Error) => {
+                console.error('Error generating proof:', error);
+                TransactionStorage.markError(tx.id, `Proof generation failed: ${error.message}`);
+              });
+          }
+          break;
+          
+        case 'proof_generated':
+        case 'waiting_proof_signature':
+          // Restore proof data and ready for user to click "Prove"
+          if (tx.withdrawalDetails && tx.disputeGame && tx.proofData) {
+            console.log('   ✅ Transaction data restored, ready for Prove');
+            setProofSubmissionData({
+              withdrawalDetails: tx.withdrawalDetails,
+              disputeGame: tx.disputeGame,
+              proofData: tx.proofData,
+            });
+          }
+          break;
+          
+        case 'proof_submitted':
+          // Restore proof transaction hash for monitoring
+          if (tx.l1ProofTxHash) {
+            console.log('   🔄 Resuming proof transaction monitoring');
+            setMonitoredProofTxHash(tx.l1ProofTxHash);
+          }
+          if (tx.withdrawalDetails && tx.disputeGame && tx.proofData) {
+            setProofSubmissionData({
+              withdrawalDetails: tx.withdrawalDetails,
+              disputeGame: tx.disputeGame,
+              proofData: tx.proofData,
+            });
+          }
+          break;
+          
+        case 'proof_confirmed':
+        case 'waiting_resolve_signature':
+          // Restore data, ready for resolve
+          if (tx.withdrawalDetails && tx.disputeGame && tx.proofData) {
+            console.log('   ✅ Transaction data restored, ready for Resolve');
+            setProofSubmissionData({
+              withdrawalDetails: tx.withdrawalDetails,
+              disputeGame: tx.disputeGame,
+              proofData: tx.proofData,
+            });
+          }
+          break;
+          
+        case 'resolving_game':
+          // Check if resolve claims or resolve game transaction is pending
+          if (tx.l1ResolveClaimsTxHash && !tx.l1ResolveGameTxHash) {
+            console.log('   🔄 Resuming resolve claims transaction monitoring');
+            setMonitoredResolveClaimsTxHash(tx.l1ResolveClaimsTxHash);
+          } else if (tx.l1ResolveGameTxHash) {
+            console.log('   🔄 Resuming resolve game transaction monitoring');
+            setMonitoredResolveGameTxHash(tx.l1ResolveGameTxHash);
+          }
+          if (tx.withdrawalDetails && tx.disputeGame && tx.proofData) {
+            setProofSubmissionData({
+              withdrawalDetails: tx.withdrawalDetails,
+              disputeGame: tx.disputeGame,
+              proofData: tx.proofData,
+            });
+          }
+          break;
+          
+        case 'game_resolved':
+        case 'waiting_finalize_signature':
+          // Restore data, ready for finalization
+          if (tx.withdrawalDetails && tx.disputeGame && tx.proofData) {
+            console.log('   ✅ Transaction data restored, ready for Finalize');
+            setProofSubmissionData({
+              withdrawalDetails: tx.withdrawalDetails,
+              disputeGame: tx.disputeGame,
+              proofData: tx.proofData,
+            });
+          }
+          break;
+          
+        case 'finalizing':
+          // Restore finalize transaction hash for monitoring
+          if (tx.l1FinalizeTxHash) {
+            console.log('   🔄 Resuming finalize transaction monitoring');
+            setMonitoredFinalizeTxHash(tx.l1FinalizeTxHash);
+          }
+          if (tx.withdrawalDetails && tx.disputeGame && tx.proofData) {
+            setProofSubmissionData({
+              withdrawalDetails: tx.withdrawalDetails,
+              disputeGame: tx.disputeGame,
+              proofData: tx.proofData,
+            });
+          }
+          break;
+          
+        default:
+          console.log(`   ⚠️ Unknown status: ${tx.status}`);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]); // Only run when address changes (including on mount)
+  // Note: We intentionally exclude generateProof, waitForDisputeGame, and setProofSubmissionData
+  // from dependencies as they are stable and we only want this to run on mount/address change
 
   // Handle approval success - automatically continue with bridge transaction
   useEffect(() => {
