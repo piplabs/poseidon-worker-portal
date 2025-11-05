@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { TokenSelector } from "@/components/token-selector";
 import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
 import { WithdrawalStepsModal } from "@/components/withdrawal-steps-modal";
-import { ChevronDown, ArrowUpDown } from "lucide-react";
+import { ChevronDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useBalance, useSwitchChain, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, createPublicClient, http, decodeEventLog } from "viem";
@@ -1709,25 +1709,25 @@ export function BridgeInterface() {
           onFinalize={handleFinalizeWithdrawal}
         />
       )}
-      <div className="w-full max-w-md mx-auto p-2">
+      <div className="w-full max-w-2xl mx-auto p-2">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="bg-card text-card-foreground border rounded-2xl p-6 space-y-4 relative"
+        className="bg-card text-card-foreground border border-border/50 rounded-3xl p-8 space-y-6 relative shadow-xl"
         style={{
           transition: 'none'
         }}
       >
-        
-
-        {/* From Token Card */}
-        <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3 relative z-10">
-          <div className="flex items-center justify-between">
+        {/* From and To Chain Selection - Side by Side */}
+        <div className="flex items-center justify-between gap-4 relative z-10">
+          {/* From Chain */}
+          <div className="flex-1 bg-muted/30 border border-border/30 rounded-2xl p-5 hover:border-border/50 transition-all duration-200">
+            <div className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wide">From</div>
             <div className="flex items-center space-x-3">
-              <div className={`w-8 h-8 rounded-full ${fromToken.color} flex items-center justify-center`}>
+              <div className={`w-10 h-10 rounded-full ${fromToken.color} flex items-center justify-center flex-shrink-0`}>
                 {fromToken.logo === 'psdn-svg' ? (
-                  <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
+                  <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white">
                     <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
                     <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
                     <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
@@ -1736,19 +1736,19 @@ export function BridgeInterface() {
                   <Image 
                     src={fromToken.logo} 
                     alt={fromToken.symbol}
-                    width={16}
-                    height={16}
-                    className="w-4 h-4 rounded-full object-cover"
+                    width={20}
+                    height={20}
+                    className="w-5 h-5 rounded-full object-cover"
                   />
                 ) : (
-                  <span className="text-white font-bold text-xs">{fromToken.logo}</span>
+                  <span className="text-white font-bold text-sm">{fromToken.logo}</span>
                 )}
               </div>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-foreground font-medium">{fromToken.name}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="text-foreground font-bold text-xl">{fromToken.symbol}</span>
                   {fromToken.layer && (
-                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                    <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
                       fromToken.layer === 'L1' 
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
                         : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
@@ -1757,18 +1757,67 @@ export function BridgeInterface() {
                     </span>
                   )}
                 </div>
-                <div className="text-muted-foreground text-sm">{fromToken.balance} {fromToken.symbol}</div>
+                <div className="text-muted-foreground text-xs truncate">{fromToken.balance} {fromToken.symbol} available</div>
               </div>
             </div>
+          </div>
+
+          {/* Swap Button - Horizontal arrows between From and To */}
+          <div className="flex items-center justify-center relative z-10 -mx-1">
             <Button
-              onClick={() => setIsTokenSelectorOpen(true)}
-              className="h-10 w-10 p-0 bg-background/50 border border-input/20 rounded-lg hover:bg-background/80 hover:border-input/40 transition-all duration-200"
+              onClick={handleSwap}
+              className="rounded-full p-2.5 h-10 w-10 bg-muted/40 border border-border/30 hover:bg-muted/60 hover:border-border/50 transition-all duration-200 shadow-sm"
+              variant="outline"
             >
-              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              <ArrowLeftRight className="h-4 w-4" />
             </Button>
           </div>
-          
-          <div className="space-y-2">
+
+          {/* To Chain */}
+          <div className="flex-1 bg-muted/30 border border-border/30 rounded-2xl p-5 hover:border-border/50 transition-all duration-200">
+            <div className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wide">To</div>
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 rounded-full ${toToken.color} flex items-center justify-center flex-shrink-0`}>
+                {toToken.logo === 'psdn-svg' ? (
+                  <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white">
+                    <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                    <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                    <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                  </svg>
+                ) : toToken.logo.startsWith('http') ? (
+                  <Image 
+                    src={toToken.logo} 
+                    alt={toToken.symbol}
+                    width={20}
+                    height={20}
+                    className="w-5 h-5 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-white font-bold text-sm">{toToken.logo}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="text-foreground font-bold text-xl">{toToken.symbol}</span>
+                  {toToken.layer && (
+                    <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                      toToken.layer === 'L1' 
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    }`}>
+                      {toToken.layer} 
+                    </span>
+                  )}
+                </div>
+                <div className="text-muted-foreground text-xs truncate">{toToken.balance} {toToken.symbol} available</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Single Amount Input Field */}
+        <div className="bg-muted/30 border border-border/30 rounded-2xl p-5 space-y-4 relative z-10 hover:border-border/50 transition-all duration-200">
+          <div className="flex items-center justify-between gap-3">
             <input
               type="text"
               inputMode="decimal"
@@ -1778,94 +1827,57 @@ export function BridgeInterface() {
               }}
               onBlur={handleFromAmountBlur}
               placeholder="0"
-              className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+              className="text-4xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full placeholder:text-muted-foreground/30 flex-1"
               disabled={false}
             />
-            <div className="flex items-center justify-between">
-              <div className="text-muted-foreground text-sm">Amount to bridge</div>
-              <button
-                onClick={handleMaxClick}
-                className="px-2.5 py-1 text-xs font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200"
+            <div className="flex items-center">
+              <Button
+                onClick={() => setIsTokenSelectorOpen(true)}
+                className="h-12 px-4 bg-background/60 border border-input/30 rounded-xl hover:bg-background/80 hover:border-input/50 transition-all duration-200 flex items-center space-x-2 shadow-sm"
               >
-                MAX
-              </button>
+                <div className={`w-6 h-6 rounded-full ${fromToken.color} flex items-center justify-center`}>
+                  {fromToken.logo === 'psdn-svg' ? (
+                    <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white">
+                      <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                      <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                      <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                    </svg>
+                  ) : fromToken.logo.startsWith('http') ? (
+                    <Image 
+                      src={fromToken.logo} 
+                      alt={fromToken.symbol}
+                      width={16}
+                      height={16}
+                      className="w-4 h-4 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white font-bold text-xs">{fromToken.logo}</span>
+                  )}
+                </div>
+                <span className="text-foreground font-semibold">{fromToken.symbol}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </Button>
             </div>
           </div>
-        </div>
-
-        {/* Swap Button */}
-        <div className="flex justify-center relative z-10">
-          <Button
-            onClick={handleSwap}
-            className="rounded-full p-2 h-10 w-10"
-            variant="outline"
-          >
-            <ArrowUpDown className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* To Token Card */}
-        <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3 relative z-10">
-          <div className="flex items-center space-x-3">
-            <div className={`w-8 h-8 rounded-full ${toToken.color} flex items-center justify-center`}>
-              {toToken.logo === 'psdn-svg' ? (
-                <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
-                  <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
-                  <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
-                  <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
-                </svg>
-              ) : toToken.logo.startsWith('http') ? (
-                <Image 
-                  src={toToken.logo} 
-                  alt={toToken.symbol}
-                  width={16}
-                  height={16}
-                  className="w-4 h-4 rounded-full object-cover"
-                />
-              ) : (
-                <span className="text-white font-bold text-xs">{toToken.logo}</span>
-              )}
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-foreground font-medium">{toToken.name}</span>
-                {toToken.layer && (
-                  <span className={`px-2 py-1 text-xs font-bold rounded-full ${
-                    toToken.layer === 'L1' 
-                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                      : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                  }`}>
-                      {toToken.layer} 
-                  </span>
-                )}
-              </div>
-              <div className="text-muted-foreground text-sm">{toToken.balance} {toToken.symbol}</div>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={toAmount}
-              onChange={(e) => handleToAmountChange(e.target.value)}
-              onBlur={handleToAmountBlur}
-              placeholder="0"
-              className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
-              disabled={false}
-            />
-            <div className="text-muted-foreground text-sm">You will receive</div>
+          <div className="flex items-center justify-between">
+            <div className="text-muted-foreground text-sm">{fromToken.balance} {fromToken.symbol} available</div>
+            <button
+              onClick={handleMaxClick}
+              className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+            >
+              MAX
+            </button>
           </div>
         </div>
 
 
         {/* Action Button */}
-        <div className="relative z-10">
+        <div className="relative z-10 pt-2">
         {!isOnCorrectNetwork ? (
           <button
             onClick={handleSwitchNetwork}
             disabled={isSwitchingChain}
-            className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSwitchingChain ? "Switching..." : `Switch to ${requiredNetwork.name}`}
           </button>
@@ -1873,10 +1885,10 @@ export function BridgeInterface() {
         <button
           onClick={handleTransact}
           disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending}
-          className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isTransactionPending ? "Processing..." : (
-            needsApproval ? "Approve PSDN" : "Transact"
+            needsApproval ? "Approve PSDN" : "Bridge"
           )}
         </button>
         )}
