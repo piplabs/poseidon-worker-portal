@@ -47,7 +47,7 @@ export default function Home() {
   } = useWriteMintPsdnApprove();
   
   const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadMintPsdnAllowance({
-    args: address ? [address, CONTRACT_ADDRESSES.APPROVAL_TARGET] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE] : undefined,
     query: { 
       enabled: !!address,
       refetchInterval: 10000,
@@ -146,9 +146,9 @@ export default function Home() {
     try {
       console.log('🔐 Approving PSDN_L2 for staking operations...');
       console.log('   Token:', CONTRACT_ADDRESSES.PSDN_L2);
-      console.log('   Spender:', CONTRACT_ADDRESSES.APPROVAL_TARGET);
+      console.log('   Spender (SubnetControlPlane):', CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE);
       await writeApproveStake({
-        args: [CONTRACT_ADDRESSES.APPROVAL_TARGET, BigInt(MAX_UINT256)],
+        args: [CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE, BigInt(MAX_UINT256)],
       });
       console.log('✅ Approval transaction submitted');
     } catch (err) {
