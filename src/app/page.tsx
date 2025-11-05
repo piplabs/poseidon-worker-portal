@@ -297,7 +297,7 @@ export default function Home() {
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="px-3 py-1.5 text-xs font-bold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                    <span className="px-3 py-1.5 text-xs font-bold rounded-full bg-gray-800/30 text-gray-300 border border-gray-700/30">
                       Proteus L2
                     </span>
                   </div>
@@ -345,12 +345,9 @@ export default function Home() {
                   className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"
                 >
                   {/* Staked Amount Card */}
-                  <div className="bg-gradient-to-br from-purple-500/30 to-purple-500/15 rounded-xl p-4 border border-purple-500/40">
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs text-gray-400">Staked Amount</p>
-                      <div className="w-8 h-8 rounded-full bg-purple-500/40 flex items-center justify-center">
-                        <span className="text-purple-400 text-lg">💰</span>
-                      </div>
                     </div>
                     <p className="text-2xl font-bold text-white mb-1">
                       {formatUnits(workerInfo.stakedAmount, 18)}
@@ -359,16 +356,13 @@ export default function Home() {
                   </div>
 
                   {/* Status Card */}
-                  <div className="bg-gradient-to-br from-green-500/30 to-green-500/15 rounded-xl p-4 border border-green-500/40">
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs text-gray-400">Worker Status</p>
-                      <div className="w-8 h-8 rounded-full bg-green-500/40 flex items-center justify-center">
-                        <span className="text-green-400 text-lg">⚡</span>
-                      </div>
                     </div>
                     <div className="flex items-center space-x-2 mb-1">
                       {workerInfo.isActive ? (
-                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-700/30 text-gray-300 border border-gray-600/30">
                           ● Active
                         </span>
                       ) : (
@@ -377,7 +371,7 @@ export default function Home() {
                         </span>
                       )}
                       {workerInfo.isJailed && (
-                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-700/30 text-gray-300 border border-gray-600/30">
                           ⚠ Jailed
                         </span>
                       )}
@@ -386,12 +380,9 @@ export default function Home() {
                   </div>
 
                   {/* Missed Heartbeats Card */}
-                  <div className="bg-gradient-to-br from-orange-500/30 to-orange-500/15 rounded-xl p-4 border border-orange-500/40">
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs text-gray-400">Missed Heartbeats</p>
-                      <div className="w-8 h-8 rounded-full bg-orange-500/40 flex items-center justify-center">
-                        <span className="text-orange-400 text-lg">💔</span>
-                      </div>
                     </div>
                     <p className="text-2xl font-bold text-white mb-1">
                       {workerInfo.missedHeartbeats.toString()}
@@ -400,12 +391,9 @@ export default function Home() {
                   </div>
 
                   {/* Last Heartbeat Card */}
-                  <div className="bg-gradient-to-br from-blue-500/30 to-blue-500/15 rounded-xl p-4 border border-blue-500/40">
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs text-gray-400">Last Heartbeat</p>
-                      <div className="w-8 h-8 rounded-full bg-blue-500/40 flex items-center justify-center">
-                        <span className="text-blue-400 text-lg">💓</span>
-                      </div>
                     </div>
                     {workerInfo.lastHeartbeat > BigInt(0) ? (
                       <>
@@ -431,20 +419,20 @@ export default function Home() {
                   transition={{ duration: 0.5, delay: 0.25 }}
                   className="mb-6"
                 >
-                  <div className="bg-orange-500/30 rounded-xl p-4 border border-orange-500/50">
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
                         <div>
-                          <p className="text-sm font-semibold text-orange-300">Unstake Request Pending</p>
-                          <p className="text-xs text-orange-400/70 mt-0.5">
+                          <p className="text-sm font-semibold text-gray-300">Unstake Request Pending</p>
+                          <p className="text-xs text-gray-400/70 mt-0.5">
                             Requested: {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()} {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleTimeString()}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-orange-400/70">Effective Epoch</p>
-                        <p className="text-2xl font-bold text-orange-200">
+                        <p className="text-xs text-gray-400/70">Effective Epoch</p>
+                        <p className="text-2xl font-bold text-gray-200">
                           {workerInfo.unstakeEffectiveEpoch.toString()}
                         </p>
                       </div>
@@ -641,7 +629,7 @@ export default function Home() {
 
                     <div className="space-y-4">
                       {/* Current Rewards Display */}
-                      <div className="bg-gradient-to-br from-green-500/30 to-green-500/15 rounded-xl p-3 border border-green-500/40">
+                      <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-xs text-gray-400 mb-1">Available Rewards</p>
@@ -726,7 +714,7 @@ export default function Home() {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: 0.5 }}
-                    className="bg-card border rounded-xl p-6 space-y-4"
+                    className="bg-card border rounded-xl p-6 space-y-6"
                   >
                     <div className="flex items-center justify-between pb-3 border-b border-white/10">
                       <div>
@@ -735,102 +723,192 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      {/* Info Box */}
-                      <div className="bg-muted/30 rounded-lg p-3">
-                        <p className="text-xs text-muted-foreground">
-                          First request unstake, then withdraw your PSDN tokens after the waiting period.
-                        </p>
-                      </div>
+                    <div className="space-y-6">
+                      {/* Process Steps Visualization */}
+                      {isOnL2 && address && (
+                        <div className="space-y-4">
+                          {/* Step 1 */}
+                          <div className="relative">
+                            <div className="flex items-start space-x-4">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                  workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                    ? 'bg-gray-800/60 border-gray-600 text-gray-300'
+                                    : 'bg-gray-800/60 border-gray-700 text-gray-500'
+                                }`}>
+                                  {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) ? (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <span className="text-sm font-bold">1</span>
+                                  )}
+                                </div>
+                                {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
+                                  <div className="w-0.5 h-8 bg-gray-700/50 mt-2"></div>
+                                )}
+                              </div>
+                              <div className="flex-1 pt-1">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">Request Unstake</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                        ? "Request submitted"
+                                        : "Initiate unstake request"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
+                                  <button
+                                    onClick={handleRequestUnstake}
+                                    disabled={!address || isRequestUnstakePending}
+                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {isRequestUnstakePending ? (
+                                      <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Requesting...
+                                      </>
+                                    ) : isRequestUnstakeSuccess ? (
+                                      "Requested!"
+                                    ) : (
+                                      "Request Unstake"
+                                    )}
+                                  </button>
+                                )}
+                                {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && (
+                                  <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">
+                                    <p className="text-xs text-gray-400">
+                                      Requested on {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Effective epoch: {workerInfo.unstakeEffectiveEpoch.toString()}
+                                    </p>
+                                  </div>
+                                )}
+                                {requestUnstakeError && formatTransactionError(requestUnstakeError) && (
+                                  <div className="mt-2 p-2.5 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                    <p className="text-destructive text-xs font-medium">
+                                      {formatTransactionError(requestUnstakeError)}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
 
-                      {/* Unstake Buttons */}
-                      {!isOnL2 ? (
+                          {/* Step 2 */}
+                          <div className="relative">
+                            <div className="flex items-start space-x-4">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                  workerInfo && workerInfo.stakedAmount === BigInt(0)
+                                    ? 'bg-gray-800/60 border-gray-600 text-gray-300'
+                                    : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                    ? 'bg-gray-800/60 border-gray-600 text-gray-300'
+                                    : 'bg-gray-800/60 border-gray-700 text-gray-500 opacity-50'
+                                }`}>
+                                  {workerInfo && workerInfo.stakedAmount === BigInt(0) ? (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <span className="text-sm font-bold">2</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex-1 pt-1">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">Withdraw Stake</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      {workerInfo && workerInfo.stakedAmount === BigInt(0)
+                                        ? "Stake withdrawn"
+                                        : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                        ? "Available after waiting period"
+                                        : "Complete step 1 first"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
+                                  <button
+                                    onClick={handleWithdrawStake}
+                                    disabled={!address || isWithdrawStakePending}
+                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {isWithdrawStakePending ? (
+                                      <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Withdrawing...
+                                      </>
+                                    ) : isWithdrawStakeSuccess ? (
+                                      "Withdrawn!"
+                                    ) : (
+                                      "Withdraw Stake"
+                                    )}
+                                  </button>
+                                )}
+                                {workerInfo && workerInfo.stakedAmount === BigInt(0) && (
+                                  <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">
+                                    <p className="text-xs text-gray-400">
+                                      Your stake has been successfully withdrawn
+                                    </p>
+                                  </div>
+                                )}
+                                {!workerInfo || workerInfo.unstakeRequestedAt === BigInt(0) ? (
+                                  <div className="bg-gray-800/30 rounded-lg p-3 border border-gray-700/20">
+                                    <p className="text-xs text-gray-500">
+                                      Complete step 1 to unlock withdrawal
+                                    </p>
+                                  </div>
+                                ) : null}
+                                {withdrawStakeError && formatTransactionError(withdrawStakeError) && (
+                                  <div className="mt-2 p-2.5 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                    <p className="text-destructive text-xs font-medium">
+                                      {formatTransactionError(withdrawStakeError)}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Network Switch */}
+                      {!isOnL2 && (
                         <button
                           onClick={handleSwitchToL2}
                           disabled={isSwitchingChain}
-                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                          {isSwitchingChain ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Switching...
+                            </>
+                          ) : (
+                            "Switch to L2"
+                          )}
                         </button>
-                      ) : (
-                        <>
-                          {/* Step 1: Request Unstake */}
-                          <button
-                            onClick={handleRequestUnstake}
-                            disabled={!address || isRequestUnstakePending || (workerInfo && workerInfo.unstakeRequestedAt > BigInt(0))}
-                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
-                              ? "Unstake Already Requested"
-                              : isRequestUnstakePending
-                                ? "Requesting..."
-                                : isRequestUnstakeSuccess
-                                  ? "Unstake Requested!"
-                                  : "1. Request Unstake"}
-                          </button>
-
-                          {/* Step 2: Withdraw Stake */}
-                          <button
-                            onClick={handleWithdrawStake}
-                            disabled={
-                              !address ||
-                              isWithdrawStakePending ||
-                              !(workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)) ||
-                              (workerInfo && workerInfo.stakedAmount === BigInt(0))
-                            }
-                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {workerInfo && workerInfo.stakedAmount === BigInt(0)
-                              ? "Already Withdrawn"
-                              : isWithdrawStakePending
-                                ? "Withdrawing..."
-                                : isWithdrawStakeSuccess
-                                  ? "Withdrawn!"
-                                  : "2. Withdraw Stake"}
-                          </button>
-                        </>
                       )}
 
-                      {/* Status Messages */}
+                      {/* Wallet Connection Status */}
                       {!address && (
-                        <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                          <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                          <span className="text-amber-700 dark:text-amber-300 text-xs">
+                        <div className="flex items-center space-x-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/30">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                          <span className="text-gray-400 text-xs">
                             Connect wallet to unstake
-                          </span>
-                        </div>
-                      )}
-
-                      {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
-                        <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-blue-700 dark:text-blue-300 text-xs">
-                            Unstake requested. Waiting for epoch {workerInfo.unstakeEffectiveEpoch.toString()} to withdraw.
-                          </span>
-                        </div>
-                      )}
-
-                      {requestUnstakeError && formatTransactionError(requestUnstakeError) && (
-                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                          <p className="text-destructive text-xs font-medium">
-                            {formatTransactionError(requestUnstakeError)}
-                          </p>
-                        </div>
-                      )}
-
-                      {withdrawStakeError && formatTransactionError(withdrawStakeError) && (
-                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                          <p className="text-destructive text-xs font-medium">
-                            {formatTransactionError(withdrawStakeError)}
-                          </p>
-                        </div>
-                      )}
-
-                      {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount === BigInt(0) && (
-                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-green-700 dark:text-green-300 text-xs">
-                            Successfully withdrawn your stake!
                           </span>
                         </div>
                       )}
