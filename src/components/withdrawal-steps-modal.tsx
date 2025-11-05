@@ -48,16 +48,20 @@ export function WithdrawalStepsModal({
   useEffect(() => {
     console.log('🕐 Countdown effect triggered. Status:', transaction.status, 'Current countdown:', countdown);
 
-    // Start countdown only when proof is confirmed (not when submitted)
-    if (transaction.status === 'proof_confirmed' && countdown === null) {
-      console.log('✅ Starting countdown from 10 seconds (proof confirmed)');
-      // Start countdown from 10 seconds
-      setCountdown(10);
+    // Calculate countdown based on when proof was confirmed
+    if (transaction.status === 'proof_confirmed' && transaction.proofConfirmedAt) {
+      const elapsed = Math.floor((Date.now() - transaction.proofConfirmedAt) / 1000);
+      const remaining = Math.max(0, 10 - elapsed);
+      
+      if (remaining !== countdown) {
+        console.log(`✅ Calculating countdown: ${remaining}s remaining (elapsed: ${elapsed}s)`);
+        setCountdown(remaining);
+      }
     } else if (!['proof_confirmed', 'proof_submitted'].includes(transaction.status)) {
       // Reset countdown if we're not in proof submitted or confirmed states
       setCountdown(null);
     }
-  }, [transaction.status]); // Remove countdown from deps to prevent re-runs
+  }, [transaction.status, transaction.proofConfirmedAt]); // Added proofConfirmedAt to deps
 
   // Separate effect for countdown timer
   useEffect(() => {
@@ -85,15 +89,20 @@ export function WithdrawalStepsModal({
   useEffect(() => {
     console.log('🕐 Finalization countdown effect. Status:', transaction.status, 'Current countdown:', finalizeCountdown);
 
-    // Start countdown when game is resolved
-    if (transaction.status === 'game_resolved' && finalizeCountdown === null) {
-      console.log('✅ Starting finalization countdown from 10 seconds');
-      setFinalizeCountdown(10);
+    // Calculate countdown based on when game was resolved
+    if (transaction.status === 'game_resolved' && transaction.gameResolvedAt) {
+      const elapsed = Math.floor((Date.now() - transaction.gameResolvedAt) / 1000);
+      const remaining = Math.max(0, 10 - elapsed);
+      
+      if (remaining !== finalizeCountdown) {
+        console.log(`✅ Calculating finalization countdown: ${remaining}s remaining (elapsed: ${elapsed}s)`);
+        setFinalizeCountdown(remaining);
+      }
     } else if (transaction.status !== 'game_resolved') {
       // Reset countdown if we're not in game_resolved state
       setFinalizeCountdown(null);
     }
-  }, [transaction.status]); // Remove finalizeCountdown from deps
+  }, [transaction.status, transaction.gameResolvedAt]); // Added gameResolvedAt to deps
 
   // Separate effect for finalization timer
   useEffect(() => {
@@ -151,10 +160,18 @@ export function WithdrawalStepsModal({
         ? 'completed' : 'pending';
 
     // Wait for challenge period (10 seconds)
-    const isChallengePeriodComplete = countdown === 0 || (countdown === null && txStatus !== 'proof_confirmed');
+    // Calculate if challenge period is complete based on timestamp if available
+    let isChallengePeriodComplete = false;
+    if (txStatus === 'proof_confirmed' && transaction.proofConfirmedAt) {
+      const elapsed = Math.floor((Date.now() - transaction.proofConfirmedAt) / 1000);
+      isChallengePeriodComplete = elapsed >= 10;
+    } else {
+      isChallengePeriodComplete = countdown === 0 || (countdown === null && txStatus !== 'proof_confirmed');
+    }
+    
     const waitChallengeStatus: StepStatus =
       // Waiting during proof_confirmed but only while countdown is running
-      (txStatus === 'proof_confirmed' && countdown !== null && countdown > 0) ? 'waiting' :
+      (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'waiting' :
       // Completed when countdown is done OR we've moved to next steps
       (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ||
       ['waiting_resolve_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
@@ -164,7 +181,7 @@ export function WithdrawalStepsModal({
     // Only active when challenge period is complete (countdown finished) AND proof is confirmed
     const resolveClaimsStatus: StepStatus =
       // Active only when proof is confirmed AND challenge period is complete (and not yet moved to next step)
-      (txStatus === 'proof_confirmed' && isChallengePeriodComplete && countdown === 0) ? 'active' :
+      (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ? 'active' :
       // Waiting while user is signing
       txStatus === 'waiting_resolve_signature' ? 'waiting' :
       // Completed once resolve claims transaction is confirmed (moved to resolving_game)
@@ -183,7 +200,15 @@ export function WithdrawalStepsModal({
 
     // Step 5: Finalize withdrawal on L1
     // Only enable finalize button after the 10-second finalization period
-    const isFinalizeReady = finalizeCountdown === 0 || (finalizeCountdown === null && txStatus !== 'game_resolved');
+    // Calculate if finalization period is complete based on timestamp if available
+    let isFinalizeReady = false;
+    if (txStatus === 'game_resolved' && transaction.gameResolvedAt) {
+      const elapsed = Math.floor((Date.now() - transaction.gameResolvedAt) / 1000);
+      isFinalizeReady = elapsed >= 10;
+    } else {
+      isFinalizeReady = finalizeCountdown === 0 || (finalizeCountdown === null && txStatus !== 'game_resolved');
+    }
+    
     const finalizeStatus: StepStatus =
       // Only active when game is resolved AND finalization countdown is complete
       (txStatus === 'game_resolved' && isFinalizeReady) ? 'active' :
@@ -224,8 +249,8 @@ export function WithdrawalStepsModal({
       },
       {
         id: 4,
-        title: countdown !== null ? `Wait ${countdown} seconds` : 'Wait 10 seconds',
-        description: 'Challenge period',
+        title: 'Wait 10 seconds',
+        description: countdown !== null && countdown > 0 ? `${countdown}s remaining` : 'Challenge period',
         status: waitChallengeStatus,
         isWaitStep: true,
         waitDuration: countdown !== null ? `${countdown}s remaining` : '~10 seconds',
@@ -252,10 +277,10 @@ export function WithdrawalStepsModal({
       },
       {
         id: 7,
-        title: finalizeCountdown !== null && finalizeCountdown > 0
-          ? `Wait ${finalizeCountdown} seconds before claiming`
-          : `Get ${transaction.amount} ${transaction.token} on Poseidon`,
-        description: transaction.token,
+        title: `Get ${transaction.amount} ${transaction.token} on Poseidon`,
+        description: finalizeCountdown !== null && finalizeCountdown > 0
+          ? `${finalizeCountdown}s remaining`
+          : transaction.token,
         fee: '0.0000005 IP',
         feeUSD: '$0.001964',
         status: finalizeStatus,
@@ -274,30 +299,73 @@ export function WithdrawalStepsModal({
   const getStepIcon = (step: Step) => {
     if (step.status === 'completed') {
       return (
-        <div className="h-4 w-4 rounded-full bg-gray-400 flex items-center justify-center">
-          <Circle className="h-2 w-2 text-gray-900 fill-gray-900" />
-        </div>
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3, type: "spring" }}
+          className="h-5 w-5 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/30"
+        >
+          <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </motion.div>
       );
     }
     if (step.status === 'waiting') {
-      return <Clock className="h-4 w-4 text-gray-400" />;
-    }
-    if (step.status === 'active' || step.status === 'confirming') {
       return (
-        <div className="h-4 w-4 rounded-full bg-gray-400 flex items-center justify-center">
-          <Circle className="h-2 w-2 text-gray-900 fill-gray-900" />
-        </div>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="h-5 w-5 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30"
+        >
+          <Clock className="h-3 w-3 text-white" />
+        </motion.div>
       );
     }
-    return <Circle className="h-4 w-4 text-gray-600" />;
+    if (step.status === 'confirming') {
+      return (
+        <motion.div
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="h-5 w-5 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/40"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="h-3 w-3 border-2 border-white border-t-transparent rounded-full"
+          />
+        </motion.div>
+      );
+    }
+    if (step.status === 'active') {
+      return (
+        <motion.div
+          animate={{ scale: [1, 1.15, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="h-5 w-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/50"
+        >
+          <motion.div
+            animate={{ scale: [1, 0.8, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="h-2.5 w-2.5 rounded-full bg-white"
+          />
+        </motion.div>
+      );
+    }
+    // Pending state
+    return (
+      <div className="h-5 w-5 rounded-full border-2 border-gray-700 bg-gray-900 flex items-center justify-center">
+        <div className="h-2 w-2 rounded-full bg-gray-700" />
+      </div>
+    );
   };
 
   const getStepIconBg = (step: Step) => {
-    if (step.status === 'completed') return 'bg-gray-700/50';
-    if (step.status === 'confirming') return 'bg-gray-800/50';
-    if (step.status === 'active') return 'bg-gray-950';
-    if (step.status === 'waiting') return 'bg-gray-950';
-    return 'bg-black';
+    if (step.status === 'completed') return 'bg-gradient-to-br from-green-950/50 to-green-900/30 border border-green-800/30';
+    if (step.status === 'confirming') return 'bg-gradient-to-br from-orange-950/50 to-orange-900/30 border border-orange-800/30';
+    if (step.status === 'active') return 'bg-gradient-to-br from-purple-950/50 to-pink-950/30 border border-purple-800/30';
+    if (step.status === 'waiting') return 'bg-gradient-to-br from-blue-950/50 to-blue-900/30 border border-blue-800/30';
+    return 'bg-gray-950/50 border border-gray-800/30';
   };
 
   return (
@@ -367,16 +435,20 @@ export function WithdrawalStepsModal({
                   {steps.map((step, index) => (
                     <div key={step.id}>
                       <div
-                        className={`flex items-center justify-between p-3 rounded-xl transition-all ${
-                          step.status === 'active' || step.status === 'waiting' || step.status === 'confirming'
-                            ? 'bg-gray-900 border border-gray-800'
+                        className={`flex items-center justify-between p-3 rounded-xl transition-all duration-300 ${
+                          step.status === 'active'
+                            ? 'bg-gradient-to-r from-purple-950/30 via-gray-900 to-pink-950/30 border border-purple-800/50 shadow-lg shadow-purple-900/20'
+                            : step.status === 'confirming'
+                            ? 'bg-gradient-to-r from-orange-950/30 via-gray-900 to-yellow-950/30 border border-orange-800/50 shadow-lg shadow-orange-900/20'
+                            : step.status === 'waiting'
+                            ? 'bg-gradient-to-r from-blue-950/30 via-gray-900 to-blue-950/30 border border-blue-800/50 shadow-lg shadow-blue-900/20'
                             : step.status === 'completed'
-                            ? 'bg-gray-950 border border-gray-900'
-                            : 'bg-black border border-gray-900'
+                            ? 'bg-gradient-to-r from-green-950/20 via-gray-950 to-green-950/20 border border-green-900/40'
+                            : 'bg-black/50 border border-gray-900'
                         }`}
                       >
                         <div className="flex items-center flex-1">
-                          <div className={`p-1.5 rounded-full ${getStepIconBg(step)} mr-2`}>
+                          <div className={`p-2 rounded-full ${getStepIconBg(step)} mr-3`}>
                             {getStepIcon(step)}
                           </div>
                           <div>
@@ -405,6 +477,68 @@ export function WithdrawalStepsModal({
                               </p>
                             )}
                           </div>
+                          
+                          {/* Transaction link */}
+                          {step.id === 1 && transaction.l2TxHash && (
+                            <a
+                              href={`https://devnet-proteus.psdnscan.io/tx/${transaction.l2TxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 p-1 text-xs text-gray-400 hover:text-white bg-gray-800/40 hover:bg-gray-700/60 border border-gray-700/40 hover:border-gray-600/60 rounded transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              ↗
+                            </a>
+                          )}
+                          {step.id === 3 && transaction.l1ProofTxHash && (
+                            <a
+                              href={`https://poseidon.storyscan.io/tx/${transaction.l1ProofTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 p-1 text-xs text-gray-400 hover:text-white bg-gray-800/40 hover:bg-gray-700/60 border border-gray-700/40 hover:border-gray-600/60 rounded transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              ↗
+                            </a>
+                          )}
+                          {step.id === 5 && transaction.l1ResolveClaimsTxHash && (
+                            <a
+                              href={`https://poseidon.storyscan.io/tx/${transaction.l1ResolveClaimsTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 p-1 text-xs text-gray-400 hover:text-white bg-gray-800/40 hover:bg-gray-700/60 border border-gray-700/40 hover:border-gray-600/60 rounded transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              ↗
+                            </a>
+                          )}
+                          {step.id === 6 && transaction.l1ResolveGameTxHash && (
+                            <a
+                              href={`https://poseidon.storyscan.io/tx/${transaction.l1ResolveGameTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 p-1 text-xs text-gray-400 hover:text-white bg-gray-800/40 hover:bg-gray-700/60 border border-gray-700/40 hover:border-gray-600/60 rounded transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              ↗
+                            </a>
+                          )}
+                          {step.id === 7 && transaction.l1FinalizeTxHash && (
+                            <a
+                              href={`https://poseidon.storyscan.io/tx/${transaction.l1FinalizeTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 p-1 text-xs text-gray-400 hover:text-white bg-gray-800/40 hover:bg-gray-700/60 border border-gray-700/40 hover:border-gray-600/60 rounded transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              ↗
+                            </a>
+                          )}
                         </div>
                         {step.status === 'completed' ? (
                           <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -454,12 +588,6 @@ export function WithdrawalStepsModal({
                     <span className="text-gray-400">Status</span>
                     <span className="text-white font-medium capitalize">
                       {transaction.status.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">Countdown</span>
-                    <span className="text-gray-300 font-medium">
-                      {countdown !== null ? `${countdown}s` : 'Not active'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
