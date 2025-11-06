@@ -741,7 +741,7 @@ export function BridgeInterface() {
         setActiveWithdrawalTxId(null);
       }
     }
-  }, [l2BridgeErc20Error, l2BridgeEthError, activeWithdrawalTxId]);
+  }, [l2BridgeErc20Error, l2BridgeEthError]);  // Removed activeWithdrawalTxId to prevent stale error from triggering cleanup on new transactions
 
   // Wait for approval transaction confirmation
   const { isSuccess: isApproveSuccess, isLoading: isApproveConfirming } = useWaitForTransactionReceipt({
