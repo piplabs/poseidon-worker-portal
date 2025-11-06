@@ -43,7 +43,6 @@ export function WithdrawalStepsModal({
 }: WithdrawalStepsModalProps) {
   const { address } = useAccount();
   const [activeTab, setActiveTab] = useState<'steps' | 'info'>('steps');
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [finalizeCountdown, setFinalizeCountdown] = useState<number | null>(null);
   const [showCompletion, setShowCompletion] = useState(false);
   const initialStatusRef = useRef<string | null>(null);
@@ -57,40 +56,7 @@ export function WithdrawalStepsModal({
     }
   }, [isOpen, transaction.status]);
 
-  // Monitor transaction status for countdown timer
-  useEffect(() => {
-    // Calculate countdown based on when proof was confirmed
-    if (transaction.status === 'proof_confirmed' && transaction.proofConfirmedAt) {
-      const elapsed = Math.floor((Date.now() - transaction.proofConfirmedAt) / 1000);
-      const remaining = Math.max(0, 10 - elapsed);
-      
-      if (remaining !== countdown) {
-        setCountdown(remaining);
-      }
-    } else if (!['proof_confirmed', 'proof_submitted'].includes(transaction.status)) {
-      // Reset countdown if we're not in proof submitted or confirmed states
-      setCountdown(null);
-    }
-  }, [transaction.status, transaction.proofConfirmedAt]); // Added proofConfirmedAt to deps
-
-  // Separate effect for countdown timer
-  useEffect(() => {
-    if (countdown !== null && countdown > 0) {
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev === null || prev <= 0) {
-            return 0;
-          }
-          const nextValue = prev - 1;
-          return nextValue;
-        });
-      }, 1000);
-
-      return () => {
-        clearInterval(timer);
-      };
-    }
-  }, [countdown]);
+  // Challenge period removed - Resolve Claims is now immediately available after Prove is confirmed
 
   // Monitor for finalization countdown
   useEffect(() => {
@@ -191,29 +157,11 @@ export function WithdrawalStepsModal({
        'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
-    // Wait for challenge period (10 seconds)
-    // Calculate if challenge period is complete based on timestamp if available
-    let isChallengePeriodComplete = false;
-    if (txStatus === 'proof_confirmed' && transaction.proofConfirmedAt) {
-      const elapsed = Math.floor((Date.now() - transaction.proofConfirmedAt) / 1000);
-      isChallengePeriodComplete = elapsed >= 10;
-    } else {
-      isChallengePeriodComplete = countdown === 0 || (countdown === null && txStatus !== 'proof_confirmed');
-    }
-    
-    const waitChallengeStatus: StepStatus =
-      // Waiting during proof_confirmed but only while countdown is running
-      (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'waiting' :
-      // Completed when countdown is done OR we've moved to next steps
-      (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ||
-      ['waiting_resolve_signature', 'resolving_claims', 'claims_resolved', 'waiting_resolve_game_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
-        ? 'completed' : 'pending';
-
     // Step 3: Resolve Claims on L1
-    // Only active when challenge period is complete (countdown finished) AND proof is confirmed
+    // Active immediately when proof is confirmed (no challenge period)
     const resolveClaimsStatus: StepStatus =
-      // Active only when proof is confirmed AND challenge period is complete (and not yet moved to next step)
-      (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ? 'active' :
+      // Active when proof is confirmed
+      txStatus === 'proof_confirmed' ? 'active' :
       // Waiting while user is signing
       txStatus === 'waiting_resolve_signature' ? 'waiting' :
       // Confirming while resolve claims transaction is being confirmed
@@ -285,14 +233,6 @@ export function WithdrawalStepsModal({
       },
       {
         id: 4,
-        title: 'Wait 10 seconds',
-        description: countdown !== null && countdown > 0 ? `${countdown}s remaining` : 'Challenge period',
-        status: waitChallengeStatus,
-        isWaitStep: true,
-        waitDuration: countdown !== null ? `${countdown}s remaining` : '~10 seconds',
-      },
-      {
-        id: 5,
         title: 'Resolve Claims on Poseidon',
         description: transaction.token,
         fee: '0.0000005 IP',
@@ -302,7 +242,7 @@ export function WithdrawalStepsModal({
         action: onResolve,
       },
       {
-        id: 6,
+        id: 5,
         title: 'Resolve Game on Poseidon',
         description: transaction.token,
         fee: '0.0000005 IP',
@@ -312,7 +252,7 @@ export function WithdrawalStepsModal({
         action: onResolveGame, // User must click to resolve game
       },
       {
-        id: 7,
+        id: 6,
         title: `Get ${transaction.amount} ${transaction.token} on Poseidon`,
         description: finalizeCountdown !== null && finalizeCountdown > 0
           ? `${finalizeCountdown}s remaining`
@@ -330,7 +270,7 @@ export function WithdrawalStepsModal({
           : undefined,
       },
     ];
-  }, [transaction, onProve, onResolve, onResolveGame, onFinalize, countdown, finalizeCountdown]);
+  }, [transaction, onProve, onResolve, onResolveGame, onFinalize, finalizeCountdown]);
 
   const getStepIcon = (step: Step) => {
     if (step.status === 'completed') {
@@ -749,7 +689,7 @@ export function WithdrawalStepsModal({
                               </svg>
                             </a>
                           )}
-                          {step.id === 5 && transaction.l1ResolveClaimsTxHash && (
+                          {step.id === 4 && transaction.l1ResolveClaimsTxHash && (
                             <a
                               href={`https://poseidon.storyscan.io/tx/${transaction.l1ResolveClaimsTxHash}`}
                               target="_blank"
@@ -763,7 +703,7 @@ export function WithdrawalStepsModal({
                               </svg>
                             </a>
                           )}
-                          {step.id === 6 && transaction.l1ResolveGameTxHash && (
+                          {step.id === 5 && transaction.l1ResolveGameTxHash && (
                             <a
                               href={`https://poseidon.storyscan.io/tx/${transaction.l1ResolveGameTxHash}`}
                               target="_blank"
@@ -777,7 +717,7 @@ export function WithdrawalStepsModal({
                               </svg>
                             </a>
                           )}
-                          {step.id === 7 && transaction.l1FinalizeTxHash && (
+                          {step.id === 6 && transaction.l1FinalizeTxHash && (
                             <a
                               href={`https://poseidon.storyscan.io/tx/${transaction.l1FinalizeTxHash}`}
                               target="_blank"

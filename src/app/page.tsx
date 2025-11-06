@@ -406,7 +406,7 @@ export default function Home() {
                   <div>
                     <h1 className="text-3xl font-bold">Worker Portal</h1>
                     <p className="text-muted-foreground text-sm">
-                      {workerInfo && workerInfo.registeredAt > BigInt(0)
+                      {workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0)
                         ? "Manage your worker registration and stake"
                         : "Register as a worker to start earning rewards"}
                     </p>
@@ -608,9 +608,9 @@ export default function Home() {
               )}
 
               {/* Actions Grid - Conditional rendering based on worker registration */}
-              {/* Check if worker is NOT registered */}
-              {(!workerInfo || workerInfo.registeredAt === BigInt(0)) ? (
-                // When NOT registered: Show only Register Worker card, centered
+              {/* Check if worker is NOT registered OR has withdrawn all stake (inactive) */}
+              {(!workerInfo || workerInfo.registeredAt === BigInt(0) || workerInfo.stakedAmount === BigInt(0)) ? (
+                // When NOT registered or inactive with 0 stake: Show only Register Worker card, centered
                 <div className="flex justify-center mb-6">
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
