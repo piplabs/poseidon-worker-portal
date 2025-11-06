@@ -90,23 +90,17 @@ export async function resolveGame({
 }: ResolveGameParams): Promise<boolean> {
   // Prevent multiple simultaneous executions
   if (isResolvingGame) {
-    console.log('⚠️ Dispute game resolution already in progress, skipping...');
     return false;
   }
 
   // Prevent execution if withdrawal is already complete
   if (isWithdrawalComplete) {
-    console.log('⚠️ Withdrawal process already complete, skipping dispute game resolution...');
     return false;
   }
 
   setIsResolvingGame(true);
   
   try {
-    console.log('\n' + '═'.repeat(80));
-    console.log('STEP 5: RESOLVE DISPUTE GAME');
-    console.log('═'.repeat(80));
-    
     // DisputeGame ABI for resolution - already defined above
 
     // Create L1 client for reading contract state
@@ -115,23 +109,17 @@ export async function resolveGame({
     });
 
     // Check game status
-    console.log('\n📊 Checking game status...');
     const status = await l1Client.readContract({
       address: gameAddress as `0x${string}`,
       abi: disputeGameAbi,
       functionName: 'status',
     });
 
-    const statusNames = ['IN_PROGRESS', 'CHALLENGER_WINS', 'DEFENDER_WINS'];
-    console.log(`   Game Status: ${status} (${statusNames[Number(status)]})`);
-
     if (Number(status) === 2) {
-      console.log('✅ Game already resolved to DEFENDER_WINS');
       return true;
     }
 
     // Check if we need to wait for MAX_CLOCK_DURATION
-    console.log('\n⏰ Checking game creation time...');
     const createdAt = await l1Client.readContract({
       address: gameAddress as `0x${string}`,
       abi: disputeGameAbi,
@@ -144,30 +132,21 @@ export async function resolveGame({
     const remaining = Math.max(0, maxClockDuration - elapsed);
 
     if (remaining > 0) {
-      console.log(`⏳ Waiting ${remaining} seconds for MAX_CLOCK_DURATION...`);
       await new Promise(resolve => setTimeout(resolve, remaining * 1000 + 2000));
     }
 
     // Get number of claims to resolve
-    console.log('\n📊 Getting number of claims...');
     const claimDataLen = await l1Client.readContract({
       address: gameAddress as `0x${string}`,
       abi: disputeGameAbi,
       functionName: 'claimDataLen',
     });
 
-    console.log(`   Claims to resolve: ${claimDataLen}`);
-
     // Resolve all claims in one transaction using the root claim
     if (Number(claimDataLen) > 0) {
-      console.log('\n🔧 Resolving all claims...');
-      
       // The resolveClaim function with numToResolve parameter can resolve multiple claims recursively
       // Starting from the root claim (index 0) and specifying numToResolve will resolve all claims
       // in the correct order (children before parents)
-      
-      console.log(`   Resolving all ${claimDataLen} claims starting from root (index 0)...`);
-      console.log(`   This will recursively resolve all child claims in the correct order`);
       
       // Note: Status will be updated to 'waiting_resolve_signature' only when wallet confirms
       // to prevent UI flashing back to previous steps
@@ -180,15 +159,8 @@ export async function resolveGame({
         functionName: 'resolveClaim',
         args: [BigInt(0), BigInt(claimDataLen)],
       });
-      
-      console.log('   ✅ Resolve all claims transaction sent to wallet');
-      console.log('   The confirmation will be handled by the useWaitForTransactionReceipt hook');
-      console.log('   The resolve game transaction will be sent automatically after claims are confirmed');
     } else {
-      console.log('\n📊 No claims to resolve - proceeding directly to resolve game');
-      
       // If there are no claims, we can directly resolve the game
-      console.log('\n🎯 Resolving the game...');
       
       // Note: Status will be updated when wallet confirms to prevent UI flashing
       
@@ -197,9 +169,6 @@ export async function resolveGame({
         abi: disputeGameAbi,
         functionName: 'resolve',
       });
-
-      console.log('✅ Game resolution transaction sent to wallet - waiting for confirmation via wagmi hook...');
-      console.log('   Step 6 (finalization) will trigger automatically after confirmation');
     }
     
     return true;

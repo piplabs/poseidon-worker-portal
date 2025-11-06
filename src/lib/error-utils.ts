@@ -110,8 +110,6 @@ export function formatTransactionError(error: unknown): string | null {
  */
 export function logTransactionError(context: string, error: unknown): void {
   if (!isUserRejectedError(error)) {
-    console.error(`❌ ${context}:`, error);
-  } else {
-    console.log(`ℹ️ ${context}: User cancelled the transaction`);
+    // Error logging removed
   }
 }

@@ -27,18 +27,12 @@ export async function finalizeWithdrawal({
 }: FinalizeWithdrawalParams): Promise<boolean> {
   // Prevent multiple finalization attempts
   if (isWithdrawalComplete) {
-    console.log('⚠️ Withdrawal already complete, skipping finalization...');
     return true;
   }
 
   try {
-    console.log('\n' + '═'.repeat(80));
-    console.log('STEP 6: FINALIZE WITHDRAWAL');
-    console.log('═'.repeat(80));
-    
     // Note: Challenge period countdown is now handled by the UI
     // The user already waited 10 seconds before clicking the "Get" button
-    console.log('✅ Challenge period already completed (handled by UI countdown)');
 
     // Create L1 client for reading balances
     const l1Client = createPublicClient({
@@ -81,19 +75,14 @@ export async function finalizeWithdrawal({
     ] as const;
 
     const wd = withdrawalDetails;
-    const l1TokenAddress = "0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46";
-    const l1StandardBridgeAddress = "0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae";
 
     // Check L1 token balance before
-    console.log('\n📊 Checking L1 token balance before finalization...');
     const balanceBefore = await l1Client.readContract({
-      address: l1TokenAddress as `0x${string}`,
+      address: CONTRACT_ADDRESSES.PSDN_L1 as `0x${string}`,
       abi: erc20Abi,
       functionName: 'balanceOf',
       args: [address as `0x${string}`],
     });
-
-    console.log(`   L1 Token Balance Before: ${balanceBefore.toString()} wei`);
 
     // Build withdrawal tuple
     const withdrawalTuple = {
@@ -105,13 +94,9 @@ export async function finalizeWithdrawal({
       data: wd.data as `0x${string}`
     };
 
-    console.log('\n🔧 Finalizing withdrawal transaction...');
-    console.log(`   Withdrawal Tuple:`, withdrawalTuple);
-
     // Update status to waiting_finalize_signature right before prompting wallet
     if (updateTransactionStatus) {
       updateTransactionStatus('waiting_finalize_signature');
-      console.log('   📝 Status updated: waiting_finalize_signature');
     }
 
     // Finalize withdrawal using writeContract
@@ -121,10 +106,6 @@ export async function finalizeWithdrawal({
       functionName: 'finalizeWithdrawalTransaction',
       args: [withdrawalTuple],
     });
-
-    console.log('✅ Finalization transaction sent to wallet!');
-    console.log('   The confirmation will be handled by the useWaitForTransactionReceipt hook');
-    console.log('   Balance checks and completion will happen after confirmation');
     
     // Note: We don't wait or check balances here - that will be handled by the useEffect
     // monitoring the finalize transaction confirmation in bridge-interface.tsx

@@ -16,7 +16,8 @@ import {
   useReadSubnetControlPlaneGetWorkerRewards,
   useWriteSubnetControlPlaneClaimRewardsFor,
   useReadSubnetControlPlaneGetMinimumStake,
-  useReadSubnetControlPlaneGetConfig
+  useReadSubnetControlPlaneGetConfig,
+  useReadMintPsdnBalanceOf
 } from "@/generated";
 import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt, useReadContract, useWriteContract } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -24,6 +25,7 @@ import { parseUnits, formatUnits } from "viem";
 import { motion } from "motion/react";
 import { CHAIN_IDS, MAX_UINT256, CONTRACT_ADDRESSES } from "@/lib/constants";
 import { isUserRejectedError, formatTransactionError } from "@/lib/error-utils";
+import { formatBalance } from "@/lib/utils";
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
@@ -84,7 +86,7 @@ export default function Home() {
     address: subnetConfig?.poseidonToken,
     abi: erc20Abi,
     functionName: 'allowance',
-    args: address && subnetConfig ? [address, CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE] : undefined,
+    args: address && subnetConfig ? [address, CONTRACT_ADDRESSES.SUBNET_TREASURY] : undefined,
     query: { 
       enabled: !!address && !!subnetConfig,
       refetchInterval: 10000,
@@ -100,7 +102,6 @@ export default function Home() {
   // Refetch allowance when approval succeeds
   useEffect(() => {
     if (isApproveStakeSuccess) {
-      console.log('✅ Stake approval confirmed, refetching allowance...');
       refetchStakeAllowance();
     }
   }, [isApproveStakeSuccess, refetchStakeAllowance]);
@@ -108,17 +109,27 @@ export default function Home() {
   const { 
     writeContract: writeRegisterWorker, 
     isPending: isRegisterWorkerPending, 
-    isSuccess: isRegisterWorkerSuccess, 
+    data: registerWorkerTxHash,
     error: registerWorkerError 
   } = useWriteSubnetControlPlaneRegisterWorker();
+
+  const { isSuccess: isRegisterWorkerSuccess, isLoading: isRegisterWorkerConfirming } = useWaitForTransactionReceipt({
+    hash: registerWorkerTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
 
   // Unstake hooks
   const { 
     writeContract: writeRequestUnstake, 
     isPending: isRequestUnstakePending,
-    isSuccess: isRequestUnstakeSuccess,
+    data: requestUnstakeTxHash,
     error: requestUnstakeError 
   } = useWriteSubnetControlPlaneRequestUnstake();
+
+  const { isSuccess: isRequestUnstakeSuccess, isLoading: isRequestUnstakeConfirming } = useWaitForTransactionReceipt({
+    hash: requestUnstakeTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
   
   const { 
     writeContract: writeWithdrawStake, 
@@ -154,6 +165,16 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
+  // PSDN L2 balance for stake section
+  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
   // Claim rewards hooks (must come after currentEpochId)
   const { data: workerRewards, refetch: refetchWorkerRewards } = useReadSubnetControlPlaneGetWorkerRewards({
     args: address && currentEpochId ? [address, currentEpochId] : undefined,
@@ -185,7 +206,7 @@ export default function Home() {
       });
     } catch (err) {
       if (!isUserRejectedError(err)) {
-        console.error("Mint failed:", err);
+        // Error silently ignored
       }
     }
   };
@@ -197,26 +218,21 @@ export default function Home() {
     }
 
     if (!subnetConfig) {
-      console.error('Cannot approve: SubnetControlPlane config not loaded');
       return;
     }
     
     try {
       const stakingTokenAddress = subnetConfig.poseidonToken;
-      console.log('🔐 Approving staking token for SubnetControlPlane...');
-      console.log('   Staking Token (from config):', stakingTokenAddress);
-      console.log('   Spender (SubnetControlPlane):', CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE);
       await writeApproveStake({
         address: stakingTokenAddress,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE, BigInt(MAX_UINT256)],
+        args: [CONTRACT_ADDRESSES.SUBNET_TREASURY, BigInt(MAX_UINT256)],
         chainId: CHAIN_IDS.L2,
       });
-      console.log('✅ Approval transaction submitted');
     } catch (err) {
       if (!isUserRejectedError(err)) {
-        console.error("Approve stake failed:", err);
+        // Error silently ignored
       }
     }
   };
@@ -224,6 +240,12 @@ export default function Home() {
   const handleMinStakeClick = () => {
     if (minimumStake) {
       setStakeAmount(formatUnits(minimumStake, 18));
+    }
+  };
+
+  const handleMaxStakeClick = () => {
+    if (psdnL2Balance) {
+      setStakeAmount(formatUnits(psdnL2Balance, 18));
     }
   };
 
@@ -241,7 +263,7 @@ export default function Home() {
       });
     } catch (err) {
       if (!isUserRejectedError(err)) {
-        console.error("Register worker failed:", err);
+        // Error silently ignored
       }
     }
   };
@@ -258,7 +280,7 @@ export default function Home() {
       });
     } catch (err) {
       if (!isUserRejectedError(err)) {
-        console.error("Request unstake failed:", err);
+        // Error silently ignored
       }
     }
   };
@@ -275,7 +297,7 @@ export default function Home() {
       });
     } catch (err) {
       if (!isUserRejectedError(err)) {
-        console.error("Withdraw stake failed:", err);
+        // Error silently ignored
       }
     }
   };
@@ -294,7 +316,7 @@ export default function Home() {
       });
     } catch (err) {
       if (!isUserRejectedError(err)) {
-        console.error("Claim rewards failed:", err);
+        // Error silently ignored
       }
     }
   };
@@ -304,7 +326,7 @@ export default function Home() {
       await switchChain({ chainId: CHAIN_IDS.L2 });
     } catch (error) {
       if (!isUserRejectedError(error)) {
-        console.error('Failed to switch network:', error);
+        // Error silently ignored
       }
     }
   };
@@ -314,7 +336,7 @@ export default function Home() {
       await switchChain({ chainId: CHAIN_IDS.L1 });
     } catch (error) {
       if (!isUserRejectedError(error)) {
-        console.error('Failed to switch network:', error);
+        // Error silently ignored
       }
     }
   };
@@ -328,12 +350,13 @@ export default function Home() {
     }
   }, [isApproveStakeSuccess, refetchStakeAllowance]);
 
-  // Refetch worker info after registration, unstake request, or withdrawal
+  // Refetch worker info and balance after registration, unstake request, or withdrawal
   useEffect(() => {
     if (isRegisterWorkerSuccess || isRequestUnstakeSuccess || isWithdrawStakeSuccess) {
       refetchWorkerInfo();
+      refetchPsdnL2Balance();
     }
-  }, [isRegisterWorkerSuccess, isRequestUnstakeSuccess, isWithdrawStakeSuccess, refetchWorkerInfo]);
+  }, [isRegisterWorkerSuccess, isRequestUnstakeSuccess, isWithdrawStakeSuccess, refetchWorkerInfo, refetchPsdnL2Balance]);
 
   // Refetch worker rewards after claiming
   useEffect(() => {
@@ -606,7 +629,14 @@ export default function Home() {
                       <div className="bg-muted/30 rounded-xl p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">Amount</span>
-                          <span className="text-xs text-muted-foreground">PSDN</span>
+                          <div className="flex items-center gap-2">
+                            {psdnL2Balance && (
+                              <span className="text-xs text-muted-foreground">
+                                {formatBalance(psdnL2Balance)} available
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">PSDN</span>
+                          </div>
                         </div>
                         <input
                           type="text"
@@ -628,14 +658,24 @@ export default function Home() {
                               Minimum required: {formatUnits(minimumStake, 18)} PSDN
                             </p>
                           )}
-                          {minimumStake && (
-                            <button
-                              onClick={handleMinStakeClick}
-                              className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
-                            >
-                              MIN
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {minimumStake && (
+                              <button
+                                onClick={handleMinStakeClick}
+                                className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                              >
+                                MIN
+                              </button>
+                            )}
+                            {psdnL2Balance && (
+                              <button
+                                onClick={handleMaxStakeClick}
+                                className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                              >
+                                MAX
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -662,10 +702,10 @@ export default function Home() {
                           ) : (
                             <button
                               onClick={handleRegisterWorker}
-                              disabled={isRegisterWorkerPending || !stakeAmount}
+                              disabled={isRegisterWorkerPending || isRegisterWorkerConfirming || !stakeAmount}
                               className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {isRegisterWorkerPending ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
+                              {(isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
                             </button>
                           )}
                         </>
@@ -834,10 +874,10 @@ export default function Home() {
                                 {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
                                   <button
                                     onClick={handleRequestUnstake}
-                                    disabled={isRequestUnstakePending}
+                                    disabled={isRequestUnstakePending || isRequestUnstakeConfirming}
                                     className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    {isRequestUnstakePending ? (
+                                    {(isRequestUnstakePending || isRequestUnstakeConfirming) ? (
                                       <>
                                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -900,8 +940,10 @@ export default function Home() {
                                     <p className="text-xs text-gray-400 mt-0.5">
                                       {workerInfo && workerInfo.stakedAmount === BigInt(0)
                                         ? "Stake withdrawn"
+                                        : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && currentEpochId && currentEpochId < workerInfo.unstakeEffectiveEpoch
+                                        ? `Wait until epoch ${workerInfo.unstakeEffectiveEpoch.toString()}`
                                         : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
-                                        ? "Available after waiting period"
+                                        ? "Ready to withdraw"
                                         : "Complete step 1 first"}
                                     </p>
                                   </div>
@@ -909,7 +951,7 @@ export default function Home() {
                                 {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
                                   <button
                                     onClick={handleWithdrawStake}
-                                    disabled={isWithdrawStakePending}
+                                    disabled={isWithdrawStakePending || !currentEpochId || currentEpochId < workerInfo.unstakeEffectiveEpoch}
                                     className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     {isWithdrawStakePending ? (
@@ -922,6 +964,8 @@ export default function Home() {
                                       </>
                                     ) : isWithdrawStakeSuccess ? (
                                       "Withdrawn!"
+                                    ) : currentEpochId && currentEpochId < workerInfo.unstakeEffectiveEpoch ? (
+                                      `Withdraw (Epoch ${currentEpochId.toString()}/${workerInfo.unstakeEffectiveEpoch.toString()})`
                                     ) : (
                                       "Withdraw Stake"
                                     )}
