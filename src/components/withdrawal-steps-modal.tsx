@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Clock, Circle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type WithdrawalTransaction, TransactionStorage } from "@/lib/transaction-tracker";
+import { useAccount } from "wagmi";
 
 interface WithdrawalStepsModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export function WithdrawalStepsModal({
   onResolveGame,
   onFinalize,
 }: WithdrawalStepsModalProps) {
+  const { address } = useAccount();
   const [activeTab, setActiveTab] = useState<'steps' | 'info'>('steps');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [finalizeCountdown, setFinalizeCountdown] = useState<number | null>(null);
@@ -810,7 +812,7 @@ export function WithdrawalStepsModal({
                                   : 'bg-gray-900 text-gray-600 cursor-not-allowed'
                               }`}
                             >
-                              {step.buttonText}
+                              {!address ? 'Connect Wallet' : step.buttonText}
                             </Button>
                           ) : null}
                         </div>

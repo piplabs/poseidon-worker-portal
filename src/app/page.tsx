@@ -680,7 +680,14 @@ export default function Home() {
                       </div>
 
                       {/* Network Check, Approval, and Register Button */}
-                      {!isOnL2 ? (
+                      {!address ? (
+                        <button
+                          onClick={() => openConnectModal?.()}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Connect Wallet
+                        </button>
+                      ) : !isOnL2 ? (
                         <button
                           onClick={handleSwitchToL2}
                           disabled={isSwitchingChain}
@@ -783,7 +790,14 @@ export default function Home() {
                       </div>
 
                       {/* Claim Button */}
-                      {!isOnL2 ? (
+                      {!address ? (
+                        <button
+                          onClick={() => openConnectModal?.()}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Connect Wallet
+                        </button>
+                      ) : !isOnL2 ? (
                         <button
                           onClick={handleSwitchToL2}
                           disabled={isSwitchingChain}
@@ -872,25 +886,34 @@ export default function Home() {
                                   </div>
                                 </div>
                                 {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
-                                  <button
-                                    onClick={handleRequestUnstake}
-                                    disabled={isRequestUnstakePending || isRequestUnstakeConfirming}
-                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {(isRequestUnstakePending || isRequestUnstakeConfirming) ? (
-                                      <>
-                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Requesting...
-                                      </>
-                                    ) : isRequestUnstakeSuccess ? (
-                                      "Requested!"
-                                    ) : (
-                                      "Request Unstake"
-                                    )}
-                                  </button>
+                                  !address ? (
+                                    <button
+                                      onClick={() => openConnectModal?.()}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      Connect Wallet
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={handleRequestUnstake}
+                                      disabled={isRequestUnstakePending || isRequestUnstakeConfirming}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {(isRequestUnstakePending || isRequestUnstakeConfirming) ? (
+                                        <>
+                                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                          Requesting...
+                                        </>
+                                      ) : isRequestUnstakeSuccess ? (
+                                        "Requested!"
+                                      ) : (
+                                        "Request Unstake"
+                                      )}
+                                    </button>
+                                  )
                                 )}
                                 {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && (
                                   <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">
@@ -949,27 +972,36 @@ export default function Home() {
                                   </div>
                                 </div>
                                 {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
-                                  <button
-                                    onClick={handleWithdrawStake}
-                                    disabled={isWithdrawStakePending || !currentEpochId || currentEpochId < workerInfo.unstakeEffectiveEpoch}
-                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {isWithdrawStakePending ? (
-                                      <>
-                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Withdrawing...
-                                      </>
-                                    ) : isWithdrawStakeSuccess ? (
-                                      "Withdrawn!"
-                                    ) : currentEpochId && currentEpochId < workerInfo.unstakeEffectiveEpoch ? (
-                                      `Withdraw (Epoch ${currentEpochId.toString()}/${workerInfo.unstakeEffectiveEpoch.toString()})`
-                                    ) : (
-                                      "Withdraw Stake"
-                                    )}
-                                  </button>
+                                  !address ? (
+                                    <button
+                                      onClick={() => openConnectModal?.()}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      Connect Wallet
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={handleWithdrawStake}
+                                      disabled={isWithdrawStakePending || !currentEpochId || currentEpochId < workerInfo.unstakeEffectiveEpoch}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {isWithdrawStakePending ? (
+                                        <>
+                                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                          Withdrawing...
+                                        </>
+                                      ) : isWithdrawStakeSuccess ? (
+                                        "Withdrawn!"
+                                      ) : currentEpochId && currentEpochId < workerInfo.unstakeEffectiveEpoch ? (
+                                        `Withdraw (Epoch ${currentEpochId.toString()}/${workerInfo.unstakeEffectiveEpoch.toString()})`
+                                      ) : (
+                                        "Withdraw Stake"
+                                      )}
+                                    </button>
+                                  )
                                 )}
                                 {workerInfo && workerInfo.stakedAmount === BigInt(0) && (
                                   <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">
@@ -999,7 +1031,14 @@ export default function Home() {
                       )}
 
                       {/* Network Switch */}
-                      {!isOnL2 && (
+                      {!address ? (
+                        <button
+                          onClick={() => openConnectModal?.()}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Connect Wallet
+                        </button>
+                      ) : !isOnL2 && (
                         <button
                           onClick={handleSwitchToL2}
                           disabled={isSwitchingChain}
@@ -1094,7 +1133,14 @@ export default function Home() {
               </div>
 
               {/* Network Check and Mint Button */}
-              {!isOnL1 ? (
+              {!address ? (
+                <button
+                  onClick={() => openConnectModal?.()}
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Connect Wallet
+                </button>
+              ) : !isOnL1 ? (
                 <button
                   onClick={handleSwitchToL1}
                   disabled={isSwitchingChain}
