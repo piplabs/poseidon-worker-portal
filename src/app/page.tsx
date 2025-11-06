@@ -6,17 +6,18 @@ import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
 import { 
   useWriteMintPsdnMint, 
-  useWriteSubnetControlPlaneRegisterWorker,
+  useWriteSubnetControlPlaneRegisterWorkerWithCapacity,
   useReadMintPsdnAllowance,
   useWriteMintPsdnApprove,
   useWriteSubnetControlPlaneRequestUnstake,
   useWriteSubnetControlPlaneWithdrawStake,
   useReadSubnetControlPlaneGetWorkerInfo,
-  useReadSubnetControlPlaneGetCurrentEpochId,
+  useReadSubnetControlPlaneGetCurrentEpoch,
   useReadSubnetControlPlaneGetWorkerRewards,
   useWriteSubnetControlPlaneClaimRewardsFor,
   useReadSubnetControlPlaneGetMinimumStake,
   useReadSubnetControlPlaneGetConfig,
+  useReadSubnetControlPlanePoseidonToken,
   useReadMintPsdnBalanceOf
 } from "@/generated";
 import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt, useReadContract, useWriteContract } from "wagmi";
@@ -32,6 +33,8 @@ export default function Home() {
   const [mintAmount, setMintAmount] = useState("");
   const [stakeAmount, setStakeAmount] = useState("");
   const [rewardEpochId, setRewardEpochId] = useState("");
+  const [selectedQueueName, setSelectedQueueName] = useState("");
+  const [queues, setQueues] = useState<string[]>([]);
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -42,8 +45,16 @@ export default function Home() {
   
   const { writeContract, isPending, isSuccess, error } = useWriteMintPsdnMint();
   
-  // Read SubnetControlPlane config to get the staking token address
+  // Read SubnetControlPlane config
   const { data: subnetConfig } = useReadSubnetControlPlaneGetConfig({
+    query: { 
+      enabled: isOnL2,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+  
+  // Read the poseidon token address
+  const { data: poseidonToken } = useReadSubnetControlPlanePoseidonToken({
     query: { 
       enabled: isOnL2,
     },
@@ -83,12 +94,12 @@ export default function Home() {
   ] as const;
   
   const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadContract({
-    address: subnetConfig?.poseidonToken,
+    address: poseidonToken,
     abi: erc20Abi,
     functionName: 'allowance',
-    args: address && subnetConfig ? [address, CONTRACT_ADDRESSES.SUBNET_TREASURY] : undefined,
+    args: address && poseidonToken ? [address, CONTRACT_ADDRESSES.SUBNET_TREASURY] : undefined,
     query: { 
-      enabled: !!address && !!subnetConfig,
+      enabled: !!address && !!poseidonToken,
       refetchInterval: 10000,
     },
     chainId: CHAIN_IDS.L2,
@@ -111,7 +122,7 @@ export default function Home() {
     isPending: isRegisterWorkerPending, 
     data: registerWorkerTxHash,
     error: registerWorkerError 
-  } = useWriteSubnetControlPlaneRegisterWorker();
+  } = useWriteSubnetControlPlaneRegisterWorkerWithCapacity();
 
   const { isSuccess: isRegisterWorkerSuccess, isLoading: isRegisterWorkerConfirming } = useWaitForTransactionReceipt({
     hash: registerWorkerTxHash as `0x${string}`,
@@ -149,13 +160,15 @@ export default function Home() {
   });
 
   // Current epoch read
-  const { data: currentEpochId } = useReadSubnetControlPlaneGetCurrentEpochId({
+  const { data: currentEpoch } = useReadSubnetControlPlaneGetCurrentEpoch({
     query: { 
       enabled: isOnL2,
       refetchInterval: 5000, // Refetch every 5 seconds
     },
     chainId: CHAIN_IDS.L2,
   });
+  
+  const currentEpochId = currentEpoch?.epochId;
 
   // Minimum stake requirement read
   const { data: minimumStake } = useReadSubnetControlPlaneGetMinimumStake({
@@ -188,9 +201,14 @@ export default function Home() {
   const { 
     writeContract: writeClaimRewards, 
     isPending: isClaimRewardsPending,
-    isSuccess: isClaimRewardsSuccess,
+    data: claimRewardsTxHash,
     error: claimRewardsError 
   } = useWriteSubnetControlPlaneClaimRewardsFor();
+
+  const { isLoading: isClaimRewardsConfirming, isSuccess: isClaimRewardsSuccess } = useWaitForTransactionReceipt({
+    hash: claimRewardsTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
 
   const handleMint = async () => {
     if (!address) {
@@ -217,14 +235,13 @@ export default function Home() {
       return;
     }
 
-    if (!subnetConfig) {
+    if (!poseidonToken) {
       return;
     }
     
     try {
-      const stakingTokenAddress = subnetConfig.poseidonToken;
       await writeApproveStake({
-        address: stakingTokenAddress,
+        address: poseidonToken,
         abi: erc20Abi,
         functionName: 'approve',
         args: [CONTRACT_ADDRESSES.SUBNET_TREASURY, BigInt(MAX_UINT256)],
@@ -258,8 +275,11 @@ export default function Home() {
     
     try {
       const amount = parseUnits(stakeAmount, 18);
+      // Default capacity
+      const capacity = BigInt(1);
+      
       await writeRegisterWorker({
-        args: [amount],
+        args: [amount, capacity, selectedQueueName],
       });
     } catch (err) {
       if (!isUserRejectedError(err)) {
@@ -372,6 +392,24 @@ export default function Home() {
       setRewardEpochId(currentEpochId.toString());
     }
   }, [currentEpochId, rewardEpochId]);
+
+  // Fetch queues from API
+  useEffect(() => {
+    const fetchQueues = async () => {
+      try {
+        const response = await fetch('https://subnet-mgmt-console-api.psdn.ai/api/v1/queues');
+        const data = await response.json();
+        if (data.items && Array.isArray(data.items)) {
+          const queueNames = data.items.map((item: any) => item.queueName);
+          setQueues(queueNames);
+        }
+      } catch (error) {
+        console.error('Failed to fetch queues:', error);
+      }
+    };
+
+    fetchQueues();
+  }, []);
 
   return (
     <>
@@ -626,6 +664,26 @@ export default function Home() {
                     </div>
 
                     <div className="space-y-4">
+                      {/* Queue Selection Dropdown */}
+                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Queue</span>
+                          <span className="text-xs text-muted-foreground">Select work queue</span>
+                        </div>
+                        <select
+                          value={selectedQueueName}
+                          onChange={(e) => setSelectedQueueName(e.target.value)}
+                          className="w-full text-sm font-medium text-foreground bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-200"
+                        >
+                          <option value="" disabled>Select a queue...</option>
+                          {queues.map((queueName) => (
+                            <option key={queueName} value={queueName}>
+                              {queueName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div className="bg-muted/30 rounded-xl p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">Amount</span>
@@ -698,7 +756,7 @@ export default function Home() {
                       ) : (
                         <>
                           {/* Check if approval is needed */}
-                          {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
+                          {stakeAmount && selectedQueueName && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
                             <button
                               onClick={handleApproveStake}
                               disabled={isApproveStakePending || (!!approveStakeTxHash && !isApproveStakeSuccess)}
@@ -709,7 +767,7 @@ export default function Home() {
                           ) : (
                             <button
                               onClick={handleRegisterWorker}
-                              disabled={isRegisterWorkerPending || isRegisterWorkerConfirming || !stakeAmount}
+                              disabled={isRegisterWorkerPending || isRegisterWorkerConfirming || !stakeAmount || !selectedQueueName}
                               className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {(isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
@@ -808,10 +866,10 @@ export default function Home() {
                       ) : (
                         <button
                           onClick={handleClaimRewards}
-                          disabled={isClaimRewardsPending || !rewardEpochId || !workerInfo.isActive}
+                          disabled={isClaimRewardsPending || isClaimRewardsConfirming || !rewardEpochId || !workerInfo.isActive || !workerRewards || workerRewards === BigInt(0)}
                           className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {isClaimRewardsPending ? "Claiming..." : isClaimRewardsSuccess ? "Claimed!" : "Claim Rewards"}
+                          {isClaimRewardsPending || isClaimRewardsConfirming ? "Claiming..." : "Claim Rewards"}
                         </button>
                       )}
 
@@ -821,15 +879,6 @@ export default function Home() {
                           <p className="text-destructive text-xs font-medium">
                             {formatTransactionError(claimRewardsError)}
                           </p>
-                        </div>
-                      )}
-
-                      {isClaimRewardsSuccess && (
-                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-green-700 dark:text-green-300 text-xs">
-                            Successfully claimed rewards for epoch {rewardEpochId}!
-                          </span>
                         </div>
                       )}
                     </div>
