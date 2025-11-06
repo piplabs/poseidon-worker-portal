@@ -77,10 +77,6 @@ export async function submitProof({
   addNotification,
 }: SubmitProofParams): Promise<string> {
   try {
-    console.log('\n' + '═'.repeat(80));
-    console.log('STEP 4: SUBMIT PROOF TO L1');
-    console.log('═'.repeat(80));
-    
     const wd = withdrawalDetails;
     
     // Build withdrawal tuple
@@ -104,51 +100,25 @@ export async function submitProof({
     // Build withdrawal proof array
     const initialWithdrawalProofArray = proofData.withdrawalProof.map((p: string) => p as `0x${string}`);
     
-    console.log('\n📊 Proof Parameters:');
-    console.log(`   Withdrawal Nonce: ${withdrawalTuple.nonce}`);
-    console.log(`   Withdrawal Sender: ${withdrawalTuple.sender}`);
-    console.log(`   Withdrawal Target: ${withdrawalTuple.target}`);
-    console.log(`   Withdrawal Value: ${withdrawalTuple.value}`);
-    console.log(`   Withdrawal Gas Limit: ${withdrawalTuple.gasLimit}`);
-    console.log(`   Withdrawal Data Length: ${withdrawalTuple.data.length} bytes`);
-    console.log(`   Game Index: ${disputeGame.gameIndex}`);
-    console.log(`   Output Root Proof Version: ${initialOutputRootProofTuple.version}`);
-    console.log(`   Output Root Proof State Root: ${initialOutputRootProofTuple.stateRoot}`);
-    console.log(`   Output Root Proof Storage Root: ${initialOutputRootProofTuple.messagePasserStorageRoot}`);
-    console.log(`   Output Root Proof Block Hash: ${initialOutputRootProofTuple.latestBlockhash}`);
-    console.log(`   Withdrawal Proof Array Length: ${initialWithdrawalProofArray.length}`);
-    
-    console.log('\n📤 Submitting proof to L1...');
     addNotification('info', '🔄 Submitting proof to L1...');
     
     // Check if user is on the correct network (Story Poseidon Devnet L1)
-    console.log(`🔍 Current chain ID: ${chainId}, Target: ${CHAIN_IDS.L1} (Story Poseidon Devnet L1)`);
-    
     if (chainId !== CHAIN_IDS.L1) {
-      console.log('🔄 Switching to Story Poseidon Devnet L1 for proof submission...');
       addNotification('info', '🔄 Switching to L1 network for proof submission...');
       try {
         await switchChain({ chainId: CHAIN_IDS.L1 });
-        console.log('✅ Switched to Story Poseidon Devnet L1');
         addNotification('success', '✅ Switched to L1 network');
         // Wait a moment for the network switch to complete
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (switchError) {
-        console.error('❌ Failed to switch to Story Poseidon Devnet L1:', switchError);
         addNotification('error', '❌ Failed to switch to L1 network');
         throw new Error('Please switch to Story Poseidon Devnet L1 to submit the proof');
       }
     } else {
-      console.log('✅ Already on Story Poseidon Devnet L1');
       addNotification('info', '✅ Already on L1 network');
     }
 
     // Validate required data
-    console.log('\n🔍 Validating proof data...');
-    console.log(`   Withdrawal Details:`, wd);
-    console.log(`   Dispute Game:`, disputeGame);
-    console.log(`   Proof Data:`, proofData);
-
     if (!disputeGame.gameIndex && disputeGame.gameIndex !== 0) {
       throw new Error('Dispute game index is undefined');
     }
@@ -179,15 +149,7 @@ export async function submitProof({
       throw new Error('Withdrawal data is undefined');
     }
 
-    console.log('\n✅ All validation passed, building withdrawal tuple...');
-
     // Validate and build output root proof tuple
-    console.log('\n🔍 Validating output root proof...');
-    console.log(`   Version: ${proofData.outputRootProof.version} (type: ${typeof proofData.outputRootProof.version})`);
-    console.log(`   State Root: ${proofData.outputRootProof.stateRoot} (type: ${typeof proofData.outputRootProof.stateRoot})`);
-    console.log(`   Storage Root: ${proofData.outputRootProof.messagePasserStorageRoot} (type: ${typeof proofData.outputRootProof.messagePasserStorageRoot})`);
-    console.log(`   Block Hash: ${proofData.outputRootProof.latestBlockhash} (type: ${typeof proofData.outputRootProof.latestBlockhash})`);
-
     if (!proofData.outputRootProof.version) {
       throw new Error('Output root proof version is undefined');
     }
@@ -208,17 +170,7 @@ export async function submitProof({
       latestBlockhash: proofData.outputRootProof.latestBlockhash as `0x${string}`
     };
 
-    console.log('\n📋 Output Root Proof Tuple:');
-    console.log(`   Version: ${validatedOutputRootProofTuple.version}`);
-    console.log(`   State Root: ${validatedOutputRootProofTuple.stateRoot}`);
-    console.log(`   Storage Root: ${validatedOutputRootProofTuple.messagePasserStorageRoot}`);
-    console.log(`   Block Hash: ${validatedOutputRootProofTuple.latestBlockhash}`);
-
     // Validate and build withdrawal proof array
-    console.log('\n🔍 Validating withdrawal proof array...');
-    console.log(`   Proof Array Length: ${proofData.withdrawalProof.length}`);
-    console.log(`   Proof Array:`, proofData.withdrawalProof);
-
     if (!Array.isArray(proofData.withdrawalProof)) {
       throw new Error('Withdrawal proof is not an array');
     }
@@ -232,15 +184,6 @@ export async function submitProof({
       }
       return p as `0x${string}`;
     });
-
-    console.log('\n📋 Withdrawal Proof Array:');
-    validatedWithdrawalProofArray.forEach((proof, index) => {
-      console.log(`   Proof ${index}: ${proof}`);
-    });
-
-    console.log('\n🔧 Submitting proof transaction...');
-    console.log(`   OptimismPortal: ${CONTRACT_ADDRESSES.OPTIMISM_PORTAL}`);
-    console.log(`   Game Index: ${disputeGame.gameIndex} (type: ${typeof disputeGame.gameIndex})`);
 
     addNotification('info', '🔧 Submitting proof transaction to L1...');
 
@@ -257,7 +200,6 @@ export async function submitProof({
       ],
     });
 
-    console.log('✅ Proof submission initiated!');
     addNotification('success', '✅ Proof transaction submitted! Waiting for confirmation...');
     return 'proof_submitted';
   } catch (error) {

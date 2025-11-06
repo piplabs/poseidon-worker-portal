@@ -57,15 +57,12 @@ export function WithdrawalStepsModal({
 
   // Monitor transaction status for countdown timer
   useEffect(() => {
-    console.log('🕐 Countdown effect triggered. Status:', transaction.status, 'Current countdown:', countdown);
-
     // Calculate countdown based on when proof was confirmed
     if (transaction.status === 'proof_confirmed' && transaction.proofConfirmedAt) {
       const elapsed = Math.floor((Date.now() - transaction.proofConfirmedAt) / 1000);
       const remaining = Math.max(0, 10 - elapsed);
       
       if (remaining !== countdown) {
-        console.log(`✅ Calculating countdown: ${remaining}s remaining (elapsed: ${elapsed}s)`);
         setCountdown(remaining);
       }
     } else if (!['proof_confirmed', 'proof_submitted'].includes(transaction.status)) {
@@ -80,17 +77,14 @@ export function WithdrawalStepsModal({
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev === null || prev <= 0) {
-            console.log('⏰ Countdown complete!');
             return 0;
           }
           const nextValue = prev - 1;
-          console.log(`⏱️ Countdown: ${nextValue}s remaining`);
           return nextValue;
         });
       }, 1000);
 
       return () => {
-        console.log('🧹 Cleaning up countdown timer');
         clearInterval(timer);
       };
     }
@@ -98,15 +92,12 @@ export function WithdrawalStepsModal({
 
   // Monitor for finalization countdown
   useEffect(() => {
-    console.log('🕐 Finalization countdown effect. Status:', transaction.status, 'Current countdown:', finalizeCountdown);
-
     // Calculate countdown based on when game was resolved
     if (transaction.status === 'game_resolved' && transaction.gameResolvedAt) {
       const elapsed = Math.floor((Date.now() - transaction.gameResolvedAt) / 1000);
       const remaining = Math.max(0, 10 - elapsed);
       
       if (remaining !== finalizeCountdown) {
-        console.log(`✅ Calculating finalization countdown: ${remaining}s remaining (elapsed: ${elapsed}s)`);
         setFinalizeCountdown(remaining);
       }
     } else if (transaction.status !== 'game_resolved') {
@@ -121,17 +112,14 @@ export function WithdrawalStepsModal({
       const timer = setInterval(() => {
         setFinalizeCountdown((prev) => {
           if (prev === null || prev <= 0) {
-            console.log('⏰ Finalization countdown complete!');
             return 0;
           }
           const nextValue = prev - 1;
-          console.log(`⏱️ Finalization countdown: ${nextValue}s remaining`);
           return nextValue;
         });
       }, 1000);
 
       return () => {
-        console.log('🧹 Cleaning up finalization countdown timer');
         clearInterval(timer);
       };
     }
@@ -144,7 +132,6 @@ export function WithdrawalStepsModal({
       const wasAlreadyCompleted = initialStatusRef.current === 'completed';
       
       if (!wasAlreadyCompleted) {
-        console.log('🎉 Transaction completed! Showing completion animation...');
         setShowCompletion(true);
       }
     }
@@ -153,17 +140,14 @@ export function WithdrawalStepsModal({
   // Separate effect to handle the auto-close timer
   useEffect(() => {
     if (showCompletion && isOpen) {
-      console.log('⏱️ Starting 3-second close timer...');
       // Close modal after animation (3 seconds)
       const timer = setTimeout(() => {
-        console.log('✅ Closing modal after completion animation');
         onClose();
         // Reset completion state for next time
         setTimeout(() => setShowCompletion(false), 300);
       }, 3000);
       
       return () => {
-        console.log('🧹 Cleanup: Clearing close timer');
         clearTimeout(timer);
       };
     }
@@ -445,8 +429,48 @@ export function WithdrawalStepsModal({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-purple-950/98 via-gray-950/98 to-blue-950/98 backdrop-blur-md"
+                  className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-purple-950/98 via-gray-950/98 to-blue-950/98 backdrop-blur-md overflow-hidden"
                 >
+                  {/* Sweeping gradient effect - Purple to Blue */}
+                  <motion.div
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{
+                      duration: 2.5,
+                      ease: [0.25, 0.46, 0.45, 0.94],
+                      repeat: Infinity,
+                      repeatDelay: 0.5
+                    }}
+                    className="absolute inset-0 opacity-60"
+                    style={{
+                      background: 'linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.6) 20%, rgba(147, 51, 234, 0.8) 35%, rgba(96, 165, 250, 0.8) 65%, rgba(59, 130, 246, 0.6) 80%, transparent 100%)',
+                      filter: 'blur(40px)',
+                      width: '100%',
+                      height: '200%',
+                      top: '-50%'
+                    }}
+                  />
+                  
+                  {/* Diagonal sweeping bars */}
+                  <motion.div
+                    initial={{ x: '-150%', y: '-150%' }}
+                    animate={{ x: '150%', y: '150%' }}
+                    transition={{
+                      duration: 3,
+                      ease: "easeInOut",
+                      repeat: Infinity,
+                      repeatDelay: 0.2
+                    }}
+                    className="absolute opacity-30"
+                    style={{
+                      background: 'linear-gradient(135deg, transparent 0%, rgba(168, 85, 247, 0.9) 30%, rgba(59, 130, 246, 0.9) 70%, transparent 100%)',
+                      width: '200%',
+                      height: '4px',
+                      transform: 'rotate(45deg)',
+                      filter: 'blur(2px)'
+                    }}
+                  />
+                  
                   {/* Animated background gradient circles */}
                   <motion.div
                     animate={{

@@ -6,8 +6,6 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
   withdrawalDetails: MessagePassedEventData | null;
   blockNumber: bigint;
 }> {
-  console.log('\n⏳ Waiting for transaction confirmation...');
-  
   // Create L2 client
   const l2Client = createPublicClient({
     transport: http(RPC_URLS.L2),
@@ -20,10 +18,6 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
   const receipt = await l2Client.getTransactionReceipt({
     hash: txHash as `0x${string}`,
   });
-  
-  console.log('\n📦 Receipt Details:');
-  console.log(`   Block Number: ${receipt.blockNumber}`);
-  console.log(`   Gas Used: ${receipt.gasUsed}`);
   
   // Extract MessagePassed event from logs
   const messagePassedTopic = '0x02a52367d10742d8032712c1bb8e0144ff1ec5ffda1ed7d70bb05a2744955054';
@@ -66,17 +60,6 @@ export async function extractMessagePassedEvent(txHash: string): Promise<{
       data: eventData.data,
       withdrawalHash
     };
-    
-    console.log('\n📋 MessagePassed Event Details:');
-    console.log(`   Withdrawal Hash: ${withdrawalHash}`);
-    console.log(`   Nonce: ${withdrawalDetails.nonce}`);
-    console.log(`   Sender: ${withdrawalDetails.sender}`);
-    console.log(`   Target: ${withdrawalDetails.target}`);
-    console.log(`   Value: ${withdrawalDetails.value} wei`);
-    console.log(`   Gas Limit: ${withdrawalDetails.gasLimit}`);
-    console.log(`   Data Length: ${withdrawalDetails.data.length} bytes`);
-  } else {
-    console.log('\n⚠️ No MessagePassed event found in transaction logs');
   }
 
   return {
