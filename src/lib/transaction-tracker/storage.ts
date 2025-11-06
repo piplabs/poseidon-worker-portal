@@ -18,7 +18,6 @@ export class TransactionStorage {
       if (!data) return [];
       return JSON.parse(data);
     } catch (error) {
-      console.error('Error reading transactions from localStorage:', error);
       return [];
     }
   }
@@ -76,7 +75,6 @@ export class TransactionStorage {
     const index = transactions.findIndex(tx => tx.id === update.id);
 
     if (index === -1) {
-      console.error(`Transaction ${update.id} not found`);
       return null;
     }
 
@@ -90,11 +88,6 @@ export class TransactionStorage {
     transactions[index] = updatedTransaction;
     this.saveAll(transactions);
     this.dispatchUpdateEvent();
-
-    console.log(`✅ Transaction ${update.id} updated:`, {
-      status: update.status,
-      errorMessage: update.errorMessage,
-    });
 
     return updatedTransaction;
   }
@@ -190,7 +183,7 @@ export class TransactionStorage {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
     } catch (error) {
-      console.error('Error saving transactions to localStorage:', error);
+      // Error silently ignored
     }
   }
 
