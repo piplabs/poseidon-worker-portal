@@ -14,9 +14,11 @@ import {
   useReadSubnetControlPlaneGetWorkerInfo,
   useReadSubnetControlPlaneGetCurrentEpochId,
   useReadSubnetControlPlaneGetWorkerRewards,
-  useWriteSubnetControlPlaneClaimRewardsFor
+  useWriteSubnetControlPlaneClaimRewardsFor,
+  useReadSubnetControlPlaneGetMinimumStake,
+  useReadSubnetControlPlaneGetConfig
 } from "@/generated";
-import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt, useReadContract, useWriteContract } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { parseUnits, formatUnits } from "viem";
 import { motion } from "motion/react";
@@ -38,18 +40,53 @@ export default function Home() {
   
   const { writeContract, isPending, isSuccess, error } = useWriteMintPsdnMint();
   
+  // Read SubnetControlPlane config to get the staking token address
+  const { data: subnetConfig } = useReadSubnetControlPlaneGetConfig({
+    query: { 
+      enabled: isOnL2,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
   // Stake tab - approval and registration hooks
   const { 
     writeContract: writeApproveStake, 
     isPending: isApproveStakePending,
     data: approveStakeTxHash,
     error: approveStakeError 
-  } = useWriteMintPsdnApprove();
+  } = useWriteContract();
   
-  const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadMintPsdnAllowance({
-    args: address ? [address, CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE] : undefined,
+  // ERC20 ABI for approve and allowance
+  const erc20Abi = [
+    {
+      type: 'function',
+      name: 'approve',
+      inputs: [
+        { name: 'spender', type: 'address' },
+        { name: 'amount', type: 'uint256' },
+      ],
+      outputs: [{ name: '', type: 'bool' }],
+      stateMutability: 'nonpayable',
+    },
+    {
+      type: 'function',
+      name: 'allowance',
+      inputs: [
+        { name: 'owner', type: 'address' },
+        { name: 'spender', type: 'address' },
+      ],
+      outputs: [{ name: '', type: 'uint256' }],
+      stateMutability: 'view',
+    },
+  ] as const;
+  
+  const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadContract({
+    address: subnetConfig?.poseidonToken,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: address && subnetConfig ? [address, CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE] : undefined,
     query: { 
-      enabled: !!address,
+      enabled: !!address && !!subnetConfig,
       refetchInterval: 10000,
     },
     chainId: CHAIN_IDS.L2,
@@ -59,6 +96,14 @@ export default function Home() {
     hash: approveStakeTxHash as `0x${string}`,
     chainId: CHAIN_IDS.L2,
   });
+
+  // Refetch allowance when approval succeeds
+  useEffect(() => {
+    if (isApproveStakeSuccess) {
+      console.log('✅ Stake approval confirmed, refetching allowance...');
+      refetchStakeAllowance();
+    }
+  }, [isApproveStakeSuccess, refetchStakeAllowance]);
   
   const { 
     writeContract: writeRegisterWorker, 
@@ -97,6 +142,14 @@ export default function Home() {
     query: { 
       enabled: isOnL2,
       refetchInterval: 5000, // Refetch every 5 seconds
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  // Minimum stake requirement read
+  const { data: minimumStake } = useReadSubnetControlPlaneGetMinimumStake({
+    query: { 
+      enabled: isOnL2,
     },
     chainId: CHAIN_IDS.L2,
   });
@@ -142,19 +195,35 @@ export default function Home() {
       openConnectModal?.();
       return;
     }
+
+    if (!subnetConfig) {
+      console.error('Cannot approve: SubnetControlPlane config not loaded');
+      return;
+    }
     
     try {
-      console.log('🔐 Approving PSDN_L2 for staking operations...');
-      console.log('   Token:', CONTRACT_ADDRESSES.PSDN_L2);
+      const stakingTokenAddress = subnetConfig.poseidonToken;
+      console.log('🔐 Approving staking token for SubnetControlPlane...');
+      console.log('   Staking Token (from config):', stakingTokenAddress);
       console.log('   Spender (SubnetControlPlane):', CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE);
       await writeApproveStake({
+        address: stakingTokenAddress,
+        abi: erc20Abi,
+        functionName: 'approve',
         args: [CONTRACT_ADDRESSES.SUBNET_CONTROL_PLANE, BigInt(MAX_UINT256)],
+        chainId: CHAIN_IDS.L2,
       });
       console.log('✅ Approval transaction submitted');
     } catch (err) {
       if (!isUserRejectedError(err)) {
         console.error("Approve stake failed:", err);
       }
+    }
+  };
+
+  const handleMinStakeClick = () => {
+    if (minimumStake) {
+      setStakeAmount(formatUnits(minimumStake, 18));
     }
   };
 
@@ -553,6 +622,21 @@ export default function Home() {
                           placeholder="0.00"
                           className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
                         />
+                        <div className="flex items-center justify-between">
+                          {minimumStake && (
+                            <p className="text-xs text-gray-500">
+                              Minimum required: {formatUnits(minimumStake, 18)} PSDN
+                            </p>
+                          )}
+                          {minimumStake && (
+                            <button
+                              onClick={handleMinStakeClick}
+                              className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                            >
+                              MIN
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Network Check, Approval, and Register Button */}
@@ -570,10 +654,10 @@ export default function Home() {
                           {stakeAmount && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
                             <button
                               onClick={handleApproveStake}
-                              disabled={isApproveStakePending}
+                              disabled={isApproveStakePending || (!!approveStakeTxHash && !isApproveStakeSuccess)}
                               className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {isApproveStakePending ? "Approving..." : "Approve PSDN"}
+                              {(isApproveStakePending || (approveStakeTxHash && !isApproveStakeSuccess)) ? "Approving..." : "Approve Tokens"}
                             </button>
                           ) : (
                             <button
@@ -604,23 +688,6 @@ export default function Home() {
                         </div>
                       )}
 
-                      {isApproveStakeSuccess && !isRegisterWorkerSuccess && (
-                        <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-blue-700 dark:text-blue-300 text-xs">
-                            PSDN approved! You can now register.
-                          </span>
-                        </div>
-                      )}
-
-                      {isRegisterWorkerSuccess && (
-                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-green-700 dark:text-green-300 text-xs">
-                            Successfully registered with {stakeAmount} PSDN!
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </motion.div>
                 </div>
