@@ -17,7 +17,7 @@ export const CONTRACT_ADDRESSES = {
   DISPUTE_GAME_FACTORY: "0x7e72ac9ba979b4323f4cede5484903b3b48249a0",
   OPTIMISM_PORTAL: "0xF0CF19Bd4f5D221AB87fcF9Ce2ff5d341e704062", // L1 OptimismPortal contract
   SUBNET_CONTROL_PLANE: "0x780caEECE73fF2f6D89d31f0a52aC4dAeA88fda2", // L2 SubnetControlPlane contract
-  SUBNET_TREASURY: "0xf84e0ae2862e2a855f968666946748217cda634d", // L2 SubnetTreasury contract
+  SUBNET_TREASURY: "0xd446710c8d61f65da89a2c43e981ab19a0df9bcb", // L2 SubnetTreasury contract
 } as const;
 
 export const TOKEN_DECIMALS = 18;

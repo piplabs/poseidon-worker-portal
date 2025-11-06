@@ -35,7 +35,7 @@ export default defineConfig({
   name: "SubnetControlPlane",
   abi: subnetControlPlaneAbi,
   address: {
-    111811: '0xdC805e279e3A4C1F8d244858CaD99f4b5FF9cC0A',
+    111811: '0x780caEECE73fF2f6D89d31f0a52aC4dAeA88fda2',
   }
  }
   ],

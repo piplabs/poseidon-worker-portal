@@ -1324,7 +1324,15 @@ export const mintPsdnConfig = {
  *
  */
 export const subnetControlPlaneAbi = [
-  { type: 'constructor', inputs: [], stateMutability: 'nonpayable' },
+  {
+    type: 'constructor',
+    inputs: [
+      { name: '_poseidonToken', internalType: 'address', type: 'address' },
+      { name: '_taskQueue', internalType: 'address', type: 'address' },
+      { name: '_subnetTreasury', internalType: 'address', type: 'address' },
+    ],
+    stateMutability: 'nonpayable',
+  },
   {
     type: 'error',
     inputs: [{ name: 'target', internalType: 'address', type: 'address' }],
@@ -1501,6 +1509,82 @@ export const subnetControlPlaneAbi = [
         indexed: true,
       },
       {
+        name: 'activityId',
+        internalType: 'bytes32',
+        type: 'bytes32',
+        indexed: true,
+      },
+      {
+        name: 'activeCount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerActivityClaimed',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'activityId',
+        internalType: 'bytes32',
+        type: 'bytes32',
+        indexed: true,
+      },
+      { name: 'success', internalType: 'bool', type: 'bool', indexed: false },
+      {
+        name: 'activeCount',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerActivityCompleted',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'oldCapacity',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'newCapacity',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerCapacityUpdated',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
         name: 'activeTasks',
         internalType: 'uint256',
         type: 'uint256',
@@ -1544,10 +1628,54 @@ export const subnetControlPlaneAbi = [
         type: 'address',
         indexed: true,
       },
+    ],
+    name: 'WorkerQueueCleared',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'queueName',
+        internalType: 'string',
+        type: 'string',
+        indexed: false,
+      },
+    ],
+    name: 'WorkerQueueUpdated',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
       {
         name: 'stakedAmount',
         internalType: 'uint256',
         type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'capacity',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'queueName',
+        internalType: 'string',
+        type: 'string',
         indexed: false,
       },
       {
@@ -1558,6 +1686,19 @@ export const subnetControlPlaneAbi = [
       },
     ],
     name: 'WorkerRegistered',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'worker',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+    ],
+    name: 'WorkerUnjailed',
   },
   {
     type: 'event',
@@ -1659,9 +1800,19 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
-    inputs: [],
+    inputs: [
+      { name: 'offset', internalType: 'uint256', type: 'uint256' },
+      { name: 'limit', internalType: 'uint256', type: 'uint256' },
+    ],
     name: 'getActiveWorkers',
     outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getActiveWorkersCount',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     stateMutability: 'view',
   },
   {
@@ -1674,8 +1825,6 @@ export const subnetControlPlaneAbi = [
         internalType: 'struct ISubnetControlPlane.Config',
         type: 'tuple',
         components: [
-          { name: 'poseidonToken', internalType: 'address', type: 'address' },
-          { name: 'subnetTreasury', internalType: 'address', type: 'address' },
           { name: 'minimumStake', internalType: 'uint256', type: 'uint256' },
           { name: 'rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
           { name: 'epochInterval', internalType: 'uint256', type: 'uint256' },
@@ -1694,6 +1843,7 @@ export const subnetControlPlaneAbi = [
             internalType: 'uint256',
             type: 'uint256',
           },
+          { name: 'jailDuration', internalType: 'uint256', type: 'uint256' },
         ],
       },
     ],
@@ -1727,20 +1877,6 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
-    inputs: [],
-    name: 'getCurrentEpochId',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getCurrentEpochWorkers',
-    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     inputs: [{ name: 'epochId', internalType: 'uint256', type: 'uint256' }],
     name: 'getEpoch',
     outputs: [
@@ -1767,16 +1903,42 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: 'epochId', internalType: 'uint256', type: 'uint256' }],
-    name: 'getEpochWorkers',
-    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
+    inputs: [],
+    name: 'getMinimumStake',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     stateMutability: 'view',
   },
   {
     type: 'function',
     inputs: [],
-    name: 'getMinimumStake',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    name: 'getProtocolVersion',
+    outputs: [{ name: '', internalType: 'string', type: 'string' }],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'queueName', internalType: 'string', type: 'string' }],
+    name: 'getQueueSubscribers',
+    outputs: [
+      { name: 'workers', internalType: 'address[]', type: 'address[]' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'getTaskQueue',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'worker', internalType: 'address', type: 'address' }],
+    name: 'getWorkerCapacity',
+    outputs: [
+      { name: 'capacity', internalType: 'uint256', type: 'uint256' },
+      { name: 'activeCount', internalType: 'uint256', type: 'uint256' },
+    ],
     stateMutability: 'view',
   },
   {
@@ -1810,9 +1972,38 @@ export const subnetControlPlaneAbi = [
             internalType: 'uint256',
             type: 'uint256',
           },
+          { name: 'unjailTime', internalType: 'uint256', type: 'uint256' },
+          { name: 'capacity', internalType: 'uint256', type: 'uint256' },
+          {
+            name: 'activeActivityCount',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'totalActivitiesCompleted',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'totalActivitiesFailed',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'capacityLastUpdated',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
         ],
       },
     ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'worker', internalType: 'address', type: 'address' }],
+    name: 'getWorkerQueue',
+    outputs: [{ name: 'queueName', internalType: 'string', type: 'string' }],
     stateMutability: 'view',
   },
   {
@@ -1827,18 +2018,39 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: 'worker', internalType: 'address', type: 'address' }],
+    name: 'getWorkerUnjailTime',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [
-      { name: 'admin', internalType: 'address', type: 'address' },
-      { name: '_poseidonToken', internalType: 'address', type: 'address' },
-      { name: '_subnetTreasury', internalType: 'address', type: 'address' },
-      { name: '_minimumStake', internalType: 'uint256', type: 'uint256' },
-      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
-      { name: '_maxActiveWorkers', internalType: 'uint256', type: 'uint256' },
-      { name: '_heartbeatInterval', internalType: 'uint256', type: 'uint256' },
       {
-        name: '_maxMissedHeartbeats',
-        internalType: 'uint256',
-        type: 'uint256',
+        name: 'initParams',
+        internalType: 'struct ISubnetControlPlane.InitParams',
+        type: 'tuple',
+        components: [
+          { name: 'admin', internalType: 'address', type: 'address' },
+          { name: 'minimumStake', internalType: 'uint256', type: 'uint256' },
+          { name: 'rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
+          {
+            name: 'maxActiveWorkers',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'heartbeatInterval',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'maxMissedHeartbeats',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          { name: 'jailDuration', internalType: 'uint256', type: 'uint256' },
+        ],
       },
     ],
     name: 'initialize',
@@ -1848,17 +2060,31 @@ export const subnetControlPlaneAbi = [
   {
     type: 'function',
     inputs: [
-      { name: 'admin', internalType: 'address', type: 'address' },
-      { name: '_poseidonToken', internalType: 'address', type: 'address' },
-      { name: '_subnetTreasury', internalType: 'address', type: 'address' },
-      { name: '_minimumStake', internalType: 'uint256', type: 'uint256' },
-      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
-      { name: '_maxActiveWorkers', internalType: 'uint256', type: 'uint256' },
-      { name: '_heartbeatInterval', internalType: 'uint256', type: 'uint256' },
       {
-        name: '_maxMissedHeartbeats',
-        internalType: 'uint256',
-        type: 'uint256',
+        name: 'initParams',
+        internalType: 'struct ISubnetControlPlane.InitParams',
+        type: 'tuple',
+        components: [
+          { name: 'admin', internalType: 'address', type: 'address' },
+          { name: 'minimumStake', internalType: 'uint256', type: 'uint256' },
+          { name: 'rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
+          {
+            name: 'maxActiveWorkers',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'heartbeatInterval',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          {
+            name: 'maxMissedHeartbeats',
+            internalType: 'uint256',
+            type: 'uint256',
+          },
+          { name: 'jailDuration', internalType: 'uint256', type: 'uint256' },
+        ],
       },
       { name: '_testMode', internalType: 'bool', type: 'bool' },
       { name: '_epochInterval', internalType: 'uint256', type: 'uint256' },
@@ -1890,6 +2116,44 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: 'workerAddr', internalType: 'address', type: 'address' }],
+    name: 'isWorkerRegistered',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'worker', internalType: 'address', type: 'address' },
+      { name: 'queueName', internalType: 'string', type: 'string' },
+    ],
+    name: 'isWorkerSubscribedToQueue',
+    outputs: [{ name: 'subscribed', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'worker', internalType: 'address', type: 'address' },
+      { name: 'activityId', internalType: 'bytes32', type: 'bytes32' },
+    ],
+    name: 'onActivityClaimed',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'worker', internalType: 'address', type: 'address' },
+      { name: 'activityId', internalType: 'bytes32', type: 'bytes32' },
+      { name: 'success', internalType: 'bool', type: 'bool' },
+    ],
+    name: 'onActivityCompleted',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     inputs: [],
     name: 'owner',
     outputs: [{ name: '', internalType: 'address', type: 'address' }],
@@ -1905,14 +2169,25 @@ export const subnetControlPlaneAbi = [
   {
     type: 'function',
     inputs: [],
+    name: 'poseidonToken',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
     name: 'proxiableUUID',
     outputs: [{ name: '', internalType: 'bytes32', type: 'bytes32' }],
     stateMutability: 'view',
   },
   {
     type: 'function',
-    inputs: [{ name: 'stakeAmount', internalType: 'uint256', type: 'uint256' }],
-    name: 'registerWorker',
+    inputs: [
+      { name: 'stakeAmount', internalType: 'uint256', type: 'uint256' },
+      { name: 'capacity', internalType: 'uint256', type: 'uint256' },
+      { name: 'queueName', internalType: 'string', type: 'string' },
+    ],
+    name: 'registerWorkerWithCapacity',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -1939,8 +2214,43 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
+    inputs: [],
+    name: 'subnetTreasury',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'queueName', internalType: 'string', type: 'string' }],
+    name: 'subscribeToQueue',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'taskQueue',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [{ name: 'newOwner', internalType: 'address', type: 'address' }],
     name: 'transferOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'unsubscribeFromQueue',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'worker', internalType: 'address', type: 'address' }],
+    name: 'unsubscribeWorkerFromQueue',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -1996,18 +2306,16 @@ export const subnetControlPlaneAbi = [
   {
     type: 'function',
     inputs: [
-      { name: '_poseidonToken', internalType: 'address', type: 'address' },
+      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
     ],
-    name: 'updatePoseidonToken',
+    name: 'updateRewardsPerEpoch',
     outputs: [],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
-    inputs: [
-      { name: '_rewardsPerEpoch', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'updateRewardsPerEpoch',
+    inputs: [{ name: 'newCapacity', internalType: 'uint256', type: 'uint256' }],
+    name: 'updateWorkerCapacity',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -2032,10 +2340,27 @@ export const subnetControlPlaneAbi = [
   },
   {
     type: 'function',
+    inputs: [
+      { name: 'queueName', internalType: 'string', type: 'string' },
+      { name: 'idx', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'workerAt',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [{ name: 'activeTasks', internalType: 'uint256', type: 'uint256' }],
     name: 'workerHeartbeat',
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'queueName', internalType: 'string', type: 'string' }],
+    name: 'workerPoolSize',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
   },
 ] as const
 
@@ -2043,7 +2368,7 @@ export const subnetControlPlaneAbi = [
  *
  */
 export const subnetControlPlaneAddress = {
-  111811: '0xdC805e279e3A4C1F8d244858CaD99f4b5FF9cC0A',
+  111811: '0x780caEECE73fF2f6D89d31f0a52aC4dAeA88fda2',
 } as const
 
 /**
@@ -3463,6 +3788,18 @@ export const useReadSubnetControlPlaneGetActiveWorkers =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getActiveWorkersCount"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetActiveWorkersCount =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getActiveWorkersCount',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getConfig"`
  *
  *
@@ -3487,30 +3824,6 @@ export const useReadSubnetControlPlaneGetCurrentEpoch =
   })
 
 /**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getCurrentEpochId"`
- *
- *
- */
-export const useReadSubnetControlPlaneGetCurrentEpochId =
-  /*#__PURE__*/ createUseReadContract({
-    abi: subnetControlPlaneAbi,
-    address: subnetControlPlaneAddress,
-    functionName: 'getCurrentEpochId',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getCurrentEpochWorkers"`
- *
- *
- */
-export const useReadSubnetControlPlaneGetCurrentEpochWorkers =
-  /*#__PURE__*/ createUseReadContract({
-    abi: subnetControlPlaneAbi,
-    address: subnetControlPlaneAddress,
-    functionName: 'getCurrentEpochWorkers',
-  })
-
-/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getEpoch"`
  *
  *
@@ -3520,18 +3833,6 @@ export const useReadSubnetControlPlaneGetEpoch =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'getEpoch',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getEpochWorkers"`
- *
- *
- */
-export const useReadSubnetControlPlaneGetEpochWorkers =
-  /*#__PURE__*/ createUseReadContract({
-    abi: subnetControlPlaneAbi,
-    address: subnetControlPlaneAddress,
-    functionName: 'getEpochWorkers',
   })
 
 /**
@@ -3547,6 +3848,54 @@ export const useReadSubnetControlPlaneGetMinimumStake =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getProtocolVersion"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetProtocolVersion =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getProtocolVersion',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getQueueSubscribers"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetQueueSubscribers =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getQueueSubscribers',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getTaskQueue"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetTaskQueue =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getTaskQueue',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerCapacity"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetWorkerCapacity =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getWorkerCapacity',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerInfo"`
  *
  *
@@ -3559,6 +3908,18 @@ export const useReadSubnetControlPlaneGetWorkerInfo =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerQueue"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetWorkerQueue =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getWorkerQueue',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerRewards"`
  *
  *
@@ -3568,6 +3929,18 @@ export const useReadSubnetControlPlaneGetWorkerRewards =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'getWorkerRewards',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"getWorkerUnjailTime"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneGetWorkerUnjailTime =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'getWorkerUnjailTime',
   })
 
 /**
@@ -3607,6 +3980,30 @@ export const useReadSubnetControlPlaneIsWorkerJailed =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"isWorkerRegistered"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneIsWorkerRegistered =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'isWorkerRegistered',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"isWorkerSubscribedToQueue"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneIsWorkerSubscribedToQueue =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'isWorkerSubscribedToQueue',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"owner"`
  *
  *
@@ -3631,6 +4028,18 @@ export const useReadSubnetControlPlanePendingOwner =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"poseidonToken"`
+ *
+ *
+ */
+export const useReadSubnetControlPlanePoseidonToken =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'poseidonToken',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"proxiableUUID"`
  *
  *
@@ -3652,6 +4061,54 @@ export const useReadSubnetControlPlaneShouldBeJailed =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'shouldBeJailed',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"subnetTreasury"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneSubnetTreasury =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'subnetTreasury',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"taskQueue"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneTaskQueue =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'taskQueue',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"workerAt"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneWorkerAt =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'workerAt',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"workerPoolSize"`
+ *
+ *
+ */
+export const useReadSubnetControlPlaneWorkerPoolSize =
+  /*#__PURE__*/ createUseReadContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'workerPoolSize',
   })
 
 /**
@@ -3749,15 +4206,39 @@ export const useWriteSubnetControlPlaneInitializeWithTestMode =
   })
 
 /**
- * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"registerWorker"`
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"onActivityClaimed"`
  *
  *
  */
-export const useWriteSubnetControlPlaneRegisterWorker =
+export const useWriteSubnetControlPlaneOnActivityClaimed =
   /*#__PURE__*/ createUseWriteContract({
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
-    functionName: 'registerWorker',
+    functionName: 'onActivityClaimed',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"onActivityCompleted"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneOnActivityCompleted =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'onActivityCompleted',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"registerWorkerWithCapacity"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneRegisterWorkerWithCapacity =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'registerWorkerWithCapacity',
   })
 
 /**
@@ -3785,6 +4266,18 @@ export const useWriteSubnetControlPlaneRequestUnstake =
   })
 
 /**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"subscribeToQueue"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneSubscribeToQueue =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'subscribeToQueue',
+  })
+
+/**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"transferOwnership"`
  *
  *
@@ -3794,6 +4287,30 @@ export const useWriteSubnetControlPlaneTransferOwnership =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'transferOwnership',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"unsubscribeFromQueue"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUnsubscribeFromQueue =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'unsubscribeFromQueue',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"unsubscribeWorkerFromQueue"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUnsubscribeWorkerFromQueue =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'unsubscribeWorkerFromQueue',
   })
 
 /**
@@ -3857,18 +4374,6 @@ export const useWriteSubnetControlPlaneUpdateMinimumStake =
   })
 
 /**
- * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updatePoseidonToken"`
- *
- *
- */
-export const useWriteSubnetControlPlaneUpdatePoseidonToken =
-  /*#__PURE__*/ createUseWriteContract({
-    abi: subnetControlPlaneAbi,
-    address: subnetControlPlaneAddress,
-    functionName: 'updatePoseidonToken',
-  })
-
-/**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateRewardsPerEpoch"`
  *
  *
@@ -3878,6 +4383,18 @@ export const useWriteSubnetControlPlaneUpdateRewardsPerEpoch =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'updateRewardsPerEpoch',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateWorkerCapacity"`
+ *
+ *
+ */
+export const useWriteSubnetControlPlaneUpdateWorkerCapacity =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateWorkerCapacity',
   })
 
 /**
@@ -4012,15 +4529,39 @@ export const useSimulateSubnetControlPlaneInitializeWithTestMode =
   })
 
 /**
- * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"registerWorker"`
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"onActivityClaimed"`
  *
  *
  */
-export const useSimulateSubnetControlPlaneRegisterWorker =
+export const useSimulateSubnetControlPlaneOnActivityClaimed =
   /*#__PURE__*/ createUseSimulateContract({
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
-    functionName: 'registerWorker',
+    functionName: 'onActivityClaimed',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"onActivityCompleted"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneOnActivityCompleted =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'onActivityCompleted',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"registerWorkerWithCapacity"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneRegisterWorkerWithCapacity =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'registerWorkerWithCapacity',
   })
 
 /**
@@ -4048,6 +4589,18 @@ export const useSimulateSubnetControlPlaneRequestUnstake =
   })
 
 /**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"subscribeToQueue"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneSubscribeToQueue =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'subscribeToQueue',
+  })
+
+/**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"transferOwnership"`
  *
  *
@@ -4057,6 +4610,30 @@ export const useSimulateSubnetControlPlaneTransferOwnership =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'transferOwnership',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"unsubscribeFromQueue"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUnsubscribeFromQueue =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'unsubscribeFromQueue',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"unsubscribeWorkerFromQueue"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUnsubscribeWorkerFromQueue =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'unsubscribeWorkerFromQueue',
   })
 
 /**
@@ -4120,18 +4697,6 @@ export const useSimulateSubnetControlPlaneUpdateMinimumStake =
   })
 
 /**
- * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updatePoseidonToken"`
- *
- *
- */
-export const useSimulateSubnetControlPlaneUpdatePoseidonToken =
-  /*#__PURE__*/ createUseSimulateContract({
-    abi: subnetControlPlaneAbi,
-    address: subnetControlPlaneAddress,
-    functionName: 'updatePoseidonToken',
-  })
-
-/**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateRewardsPerEpoch"`
  *
  *
@@ -4141,6 +4706,18 @@ export const useSimulateSubnetControlPlaneUpdateRewardsPerEpoch =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     functionName: 'updateRewardsPerEpoch',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `functionName` set to `"updateWorkerCapacity"`
+ *
+ *
+ */
+export const useSimulateSubnetControlPlaneUpdateWorkerCapacity =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    functionName: 'updateWorkerCapacity',
   })
 
 /**
@@ -4275,6 +4852,42 @@ export const useWatchSubnetControlPlaneUpgradedEvent =
   })
 
 /**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerActivityClaimed"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerActivityClaimedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerActivityClaimed',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerActivityCompleted"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerActivityCompletedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerActivityCompleted',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerCapacityUpdated"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerCapacityUpdatedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerCapacityUpdated',
+  })
+
+/**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerHeartbeat"`
  *
  *
@@ -4299,6 +4912,30 @@ export const useWatchSubnetControlPlaneWorkerJailedEvent =
   })
 
 /**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerQueueCleared"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerQueueClearedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerQueueCleared',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerQueueUpdated"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerQueueUpdatedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerQueueUpdated',
+  })
+
+/**
  * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerRegistered"`
  *
  *
@@ -4308,6 +4945,18 @@ export const useWatchSubnetControlPlaneWorkerRegisteredEvent =
     abi: subnetControlPlaneAbi,
     address: subnetControlPlaneAddress,
     eventName: 'WorkerRegistered',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link subnetControlPlaneAbi}__ and `eventName` set to `"WorkerUnjailed"`
+ *
+ *
+ */
+export const useWatchSubnetControlPlaneWorkerUnjailedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: subnetControlPlaneAbi,
+    address: subnetControlPlaneAddress,
+    eventName: 'WorkerUnjailed',
   })
 
 /**
