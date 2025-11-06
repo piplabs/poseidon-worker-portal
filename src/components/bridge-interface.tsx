@@ -257,13 +257,20 @@ export function BridgeInterface() {
       if (!isUserRejectedError(resolveClaimsError)) {
         logTransactionError('Resolve Claims Transaction Failed', resolveClaimsError);
 
+        // Reset status back to proof_confirmed so user can retry after fixing the issue
         if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
           const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
           const tx = TransactionStorage.getAll().find(t =>
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.markError(tx.id, `Resolve claims transaction failed: ${resolveClaimsError.message}`);
+            TransactionStorage.update({ 
+              id: tx.id, 
+              status: 'proof_confirmed',
+              errorMessage: 'Insufficient gas on L1.'
+            });
+            // Clear the processing flag so user can retry
+            processingTxs.current.delete(`resolve_${tx.id}`);
           }
         }
       } else {
@@ -274,7 +281,7 @@ export function BridgeInterface() {
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.update({ id: tx.id, status: 'proof_confirmed' });
+            TransactionStorage.update({ id: tx.id, status: 'proof_confirmed', errorMessage: undefined });
             // Also clear the processing flag
             processingTxs.current.delete(`resolve_${tx.id}`);
           }
@@ -338,13 +345,20 @@ export function BridgeInterface() {
       if (!isUserRejectedError(resolveGameError)) {
         logTransactionError('Resolve Game Transaction Failed', resolveGameError);
 
+        // Reset status back to claims_resolved so user can retry after fixing the issue
         if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
           const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
           const tx = TransactionStorage.getAll().find(t =>
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.markError(tx.id, `Resolve game transaction failed: ${resolveGameError.message}`);
+            TransactionStorage.update({ 
+              id: tx.id, 
+              status: 'claims_resolved',
+              errorMessage: 'Insufficient gas on L1.'
+            });
+            // Clear the processing flag so user can retry
+            processingTxs.current.delete(`resolve_game_final_${tx.id}`);
           }
         }
       } else {
@@ -355,7 +369,7 @@ export function BridgeInterface() {
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.update({ id: tx.id, status: 'claims_resolved' });
+            TransactionStorage.update({ id: tx.id, status: 'claims_resolved', errorMessage: undefined });
             // Also clear the processing flag
             processingTxs.current.delete(`resolve_game_final_${tx.id}`);
           }
@@ -423,13 +437,21 @@ export function BridgeInterface() {
       if (!isUserRejectedError(finalizeError)) {
         logTransactionError('Finalize Withdrawal Transaction Failed', finalizeError);
 
+        // Reset status back to game_resolved so user can retry after fixing the issue (e.g., adding gas)
         if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
           const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
           const tx = TransactionStorage.getAll().find(t =>
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.markError(tx.id, `Finalize withdrawal transaction failed: ${finalizeError.message}`);
+            // Store error message for user feedback
+            TransactionStorage.update({ 
+              id: tx.id, 
+              status: 'game_resolved',
+              errorMessage: 'Insufficient gas on L1.'
+            });
+            // Clear the processing flag so user can retry
+            processingTxs.current.delete(`finalize_${tx.id}`);
           }
         }
       } else {
@@ -440,7 +462,7 @@ export function BridgeInterface() {
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+            TransactionStorage.update({ id: tx.id, status: 'game_resolved', errorMessage: undefined });
             // Also clear the processing flag
             processingTxs.current.delete(`finalize_${tx.id}`);
           }
@@ -542,6 +564,23 @@ export function BridgeInterface() {
     if (proofError) {
       if (!isUserRejectedError(proofError)) {
         logTransactionError('Step 4 FAILED: Proof submission transaction failed', proofError);
+        
+        // Reset status back to proof_generated so user can retry after fixing the issue
+        if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
+          const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
+          const tx = TransactionStorage.getAll().find(t =>
+            t.withdrawalDetails?.withdrawalHash === txId
+          );
+          if (tx) {
+            TransactionStorage.update({ 
+              id: tx.id, 
+              status: 'proof_generated',
+              errorMessage: 'Insufficient gas on L1.'
+            });
+            // Clear the processing flag so user can retry
+            processingTxs.current.delete(`prove_${tx.id}`);
+          }
+        }
       } else {
         // User cancelled - reset status back to proof_generated so they can retry
         if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
@@ -550,7 +589,7 @@ export function BridgeInterface() {
             t.withdrawalDetails?.withdrawalHash === txId
           );
           if (tx) {
-            TransactionStorage.update({ id: tx.id, status: 'proof_generated' });
+            TransactionStorage.update({ id: tx.id, status: 'proof_generated', errorMessage: undefined });
             // Also clear the processing flag
             processingTxs.current.delete(`prove_${tx.id}`);
           }
@@ -1505,6 +1544,16 @@ export function BridgeInterface() {
       return;
     }
 
+    // Guard: Check if user has sufficient L1 gas (minimum 0.001 IP for transaction)
+    const minGasRequired = parseUnits('0.001', 18);
+    if (ipBalance && ipBalance.value < minGasRequired) {
+      TransactionStorage.update({ 
+        id: tx.id, 
+        errorMessage: 'Insufficient gas on L1.'
+      });
+      return;
+    }
+
     // Guard: Prevent duplicate submissions
     if (processingTxs.current.has(`prove_${tx.id}`)) {
       return;
@@ -1519,8 +1568,8 @@ export function BridgeInterface() {
       proofData: tx.proofData
     });
 
-    // Update status to waiting for signature
-    TransactionStorage.update({ id: tx.id, status: 'waiting_proof_signature' });
+    // Update status to waiting for signature and clear any previous error
+    TransactionStorage.update({ id: tx.id, status: 'waiting_proof_signature', errorMessage: undefined });
 
     // Submit proof - this will prompt user's wallet
     submitProof(tx.withdrawalDetails, tx.disputeGame, tx.proofData)
@@ -1558,6 +1607,16 @@ export function BridgeInterface() {
       return;
     }
     
+    // Guard: Check if user has sufficient L1 gas (minimum 0.001 IP for transaction)
+    const minGasRequired = parseUnits('0.001', 18);
+    if (ipBalance && ipBalance.value < minGasRequired) {
+      TransactionStorage.update({ 
+        id: tx.id, 
+        errorMessage: 'Insufficient gas on L1.'
+      });
+      return;
+    }
+    
     // Guard: Prevent duplicate submissions
     if (processingTxs.current.has(`resolve_${tx.id}`)) {
       return;
@@ -1565,8 +1624,8 @@ export function BridgeInterface() {
     
     processingTxs.current.add(`resolve_${tx.id}`);
     
-    // Update status to waiting for signature BEFORE calling resolveGame
-    TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_signature' });
+    // Update status to waiting for signature BEFORE calling resolveGame and clear any previous error
+    TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_signature', errorMessage: undefined });
     
     // Call resolveGame - this will send resolve claims transaction
     resolveGame(tx.disputeGame.gameAddress, tx.id)
@@ -1601,6 +1660,16 @@ export function BridgeInterface() {
       return;
     }
     
+    // Guard: Check if user has sufficient L1 gas (minimum 0.001 IP for transaction)
+    const minGasRequired = parseUnits('0.001', 18);
+    if (ipBalance && ipBalance.value < minGasRequired) {
+      TransactionStorage.update({ 
+        id: tx.id, 
+        errorMessage: 'Insufficient gas on L1.'
+      });
+      return;
+    }
+    
     // Guard: Prevent duplicate submissions
     if (processingTxs.current.has(`resolve_game_final_${tx.id}`)) {
       return;
@@ -1608,8 +1677,8 @@ export function BridgeInterface() {
     
     processingTxs.current.add(`resolve_game_final_${tx.id}`);
     
-    // Update status to waiting for signature BEFORE calling writeResolveGameContract
-    TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_game_signature' });
+    // Update status to waiting for signature BEFORE calling writeResolveGameContract and clear any previous error
+    TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_game_signature', errorMessage: undefined });
     
     // Get the dispute game address from proof submission data
     const gameAddress = proofSubmissionData.disputeGame.gameAddress;
@@ -1668,6 +1737,16 @@ export function BridgeInterface() {
       return;
     }
     
+    // Guard: Check if user has sufficient L1 gas (minimum 0.001 IP for transaction)
+    const minGasRequired = parseUnits('0.001', 18);
+    if (ipBalance && ipBalance.value < minGasRequired) {
+      TransactionStorage.update({ 
+        id: tx.id, 
+        errorMessage: 'Insufficient gas on L1.'
+      });
+      return;
+    }
+    
     // Guard: Prevent duplicate submissions
     if (processingTxs.current.has(`finalize_${tx.id}`)) {
       return;
@@ -1675,8 +1754,8 @@ export function BridgeInterface() {
     
     processingTxs.current.add(`finalize_${tx.id}`);
     
-    // Update status to waiting for signature BEFORE calling finalizeWithdrawal
-    TransactionStorage.update({ id: tx.id, status: 'waiting_finalize_signature' });
+    // Update status to waiting for signature BEFORE calling finalizeWithdrawal and clear any previous error
+    TransactionStorage.update({ id: tx.id, status: 'waiting_finalize_signature', errorMessage: undefined });
     
     // Call finalizeWithdrawal - this will prompt user's wallet
     finalizeWithdrawal(tx.withdrawalDetails, tx.id)
@@ -1902,6 +1981,26 @@ export function BridgeInterface() {
       return () => clearInterval(interval);
     }
   }, [isWithdrawalModalOpen, activeWithdrawalTxId]);
+
+  // Auto-check gas balance every 3 seconds to clear errors when user adds gas
+  useEffect(() => {
+    if (isWithdrawalModalOpen && activeWithdrawalTxId && ipBalance) {
+      const interval = setInterval(() => {
+        const tx = TransactionStorage.getById(activeWithdrawalTxId);
+        if (tx && tx.errorMessage) {
+          const minGasRequired = parseUnits('0.001', 18);
+          // If user now has sufficient gas, clear the error
+          if (ipBalance.value >= minGasRequired) {
+            TransactionStorage.update({ 
+              id: tx.id, 
+              errorMessage: undefined 
+            });
+          }
+        }
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [isWithdrawalModalOpen, activeWithdrawalTxId, ipBalance]);
   
   const activeWithdrawalTx = useMemo(() => {
     if (!activeWithdrawalTxId) return null;

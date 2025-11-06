@@ -5,8 +5,8 @@ export const psdnDevnet = defineChain({
   name: "Story Poseidon Devnet",
   nativeCurrency: {
     decimals: 18,
-    name: "Ethereum",
-    symbol: "ETH",
+    name: "Story",
+    symbol: "IP",
   },
   rpcUrls: {
     default: {
@@ -30,8 +30,8 @@ export const proteusDevnet = defineChain({
   name: "Proteus Devnet",
   nativeCurrency: {
     decimals: 18,
-    name: "Ethereum",
-    symbol: "ETH",
+    name: "Story",
+    symbol: "IP",
   },
   rpcUrls: {
     default: {

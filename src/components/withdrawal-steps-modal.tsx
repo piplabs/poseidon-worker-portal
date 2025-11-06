@@ -629,7 +629,7 @@ export function WithdrawalStepsModal({
                           <div className={`p-2 rounded-full ${getStepIconBg(step)} mr-3`}>
                             {getStepIcon(step)}
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <p
                               className={`text-sm font-medium ${
                                 step.status === 'pending'
@@ -653,6 +653,17 @@ export function WithdrawalStepsModal({
                               <p className="text-[10px] text-gray-500">
                                 💰 {step.fee} <span className="text-gray-600">{step.feeUSD}</span>
                               </p>
+                            )}
+                            {/* Inline error display for this step */}
+                            {transaction.errorMessage && step.status === 'active' && (
+                              <div className="mt-1.5 flex items-center gap-1.5 text-red-400">
+                                <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <p className="text-[10px] leading-tight">
+                                  {transaction.errorMessage}
+                                </p>
+                              </div>
                             )}
                           </div>
                           
