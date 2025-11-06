@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Clock, Circle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,17 @@ export function WithdrawalStepsModal({
   const [activeTab, setActiveTab] = useState<'steps' | 'info'>('steps');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [finalizeCountdown, setFinalizeCountdown] = useState<number | null>(null);
+  const [showCompletion, setShowCompletion] = useState(false);
+  const initialStatusRef = useRef<string | null>(null);
+  
+  // Track initial status when modal opens
+  useEffect(() => {
+    if (isOpen && initialStatusRef.current === null) {
+      initialStatusRef.current = transaction.status;
+    } else if (!isOpen) {
+      initialStatusRef.current = null;
+    }
+  }, [isOpen, transaction.status]);
 
   // Monitor transaction status for countdown timer
   useEffect(() => {
@@ -126,6 +137,38 @@ export function WithdrawalStepsModal({
     }
   }, [finalizeCountdown]);
 
+  // Handle completion animation - only show if transaction completed during this session
+  useEffect(() => {
+    if (transaction.status === 'completed' && !showCompletion && isOpen) {
+      // Only show animation if transaction wasn't already completed when modal opened
+      const wasAlreadyCompleted = initialStatusRef.current === 'completed';
+      
+      if (!wasAlreadyCompleted) {
+        console.log('🎉 Transaction completed! Showing completion animation...');
+        setShowCompletion(true);
+      }
+    }
+  }, [transaction.status, showCompletion, isOpen]);
+
+  // Separate effect to handle the auto-close timer
+  useEffect(() => {
+    if (showCompletion && isOpen) {
+      console.log('⏱️ Starting 3-second close timer...');
+      // Close modal after animation (3 seconds)
+      const timer = setTimeout(() => {
+        console.log('✅ Closing modal after completion animation');
+        onClose();
+        // Reset completion state for next time
+        setTimeout(() => setShowCompletion(false), 300);
+      }, 3000);
+      
+      return () => {
+        console.log('🧹 Cleanup: Clearing close timer');
+        clearTimeout(timer);
+      };
+    }
+  }, [showCompletion, isOpen, onClose]);
+
   // Determine step statuses based on transaction status
   const steps: Step[] = useMemo(() => {
     const txStatus = transaction.status;
@@ -135,15 +178,17 @@ export function WithdrawalStepsModal({
       txStatus === 'pending' ? 'confirming' :
       ['l2_confirmed', 'waiting_game', 'game_found', 'generating_proof', 'proof_generated', 
        'waiting_proof_signature', 'proof_submitted', 'proof_confirmed', 'waiting_resolve_signature',
-       'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
+       'resolving_claims', 'claims_resolved', 'waiting_resolve_game_signature', 'resolving_game',
+       'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Wait for dispute game (1 hour)
     const waitGameStatus: StepStatus =
       ['l2_confirmed', 'waiting_game'].includes(txStatus) ? 'waiting' :
       ['game_found', 'generating_proof', 'proof_generated', 'waiting_proof_signature', 
-       'proof_submitted', 'proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
-       'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
+       'proof_submitted', 'proof_confirmed', 'waiting_resolve_signature', 'resolving_claims',
+       'claims_resolved', 'waiting_resolve_game_signature', 'resolving_game', 'game_resolved',
+       'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Step 2: Prove on L1
@@ -155,8 +200,9 @@ export function WithdrawalStepsModal({
       // Show as confirming while transaction is being confirmed
       txStatus === 'proof_submitted' ? 'confirming' :
       // Completed after transaction is confirmed on L1
-      ['proof_confirmed', 'waiting_resolve_signature', 'resolving_game',
-       'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
+      ['proof_confirmed', 'waiting_resolve_signature', 'resolving_claims', 'claims_resolved',
+       'waiting_resolve_game_signature', 'resolving_game', 'game_resolved',
+       'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Wait for challenge period (10 seconds)
@@ -174,7 +220,7 @@ export function WithdrawalStepsModal({
       (txStatus === 'proof_confirmed' && !isChallengePeriodComplete) ? 'waiting' :
       // Completed when countdown is done OR we've moved to next steps
       (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ||
-      ['waiting_resolve_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
+      ['waiting_resolve_signature', 'resolving_claims', 'claims_resolved', 'waiting_resolve_game_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Step 3: Resolve Claims on L1
@@ -184,16 +230,20 @@ export function WithdrawalStepsModal({
       (txStatus === 'proof_confirmed' && isChallengePeriodComplete) ? 'active' :
       // Waiting while user is signing
       txStatus === 'waiting_resolve_signature' ? 'waiting' :
-      // Completed once resolve claims transaction is confirmed (moved to resolving_game)
-      ['resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
+      // Confirming while resolve claims transaction is being confirmed
+      txStatus === 'resolving_claims' ? 'confirming' :
+      // Completed once resolve claims transaction is confirmed
+      ['claims_resolved', 'waiting_resolve_game_signature', 'resolving_game', 'game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
 
     // Step 4: Resolve Game on L1
     const resolveGameStatus: StepStatus =
-      // If resolving_game AND transaction has been submitted, show as confirming
+      // Active when claims are resolved and waiting for user to click
+      txStatus === 'claims_resolved' ? 'active' :
+      // Waiting while user is signing
+      txStatus === 'waiting_resolve_game_signature' ? 'waiting' :
+      // Confirming while resolve game transaction is being confirmed
       (txStatus === 'resolving_game' && transaction.l1ResolveGameTxHash) ? 'confirming' :
-      // If resolving_game but no transaction hash yet, button should be active (waiting for user to click)
-      (txStatus === 'resolving_game' && !transaction.l1ResolveGameTxHash) ? 'active' :
       // Completed after resolve game is confirmed
       ['game_resolved', 'waiting_finalize_signature', 'finalizing', 'completed'].includes(txStatus)
         ? 'completed' : 'pending';
@@ -388,6 +438,168 @@ export function WithdrawalStepsModal({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-black rounded-2xl shadow-2xl z-50 overflow-hidden border border-gray-800"
           >
+            {/* Completion Animation Overlay */}
+            <AnimatePresence>
+              {showCompletion && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-purple-950/98 via-gray-950/98 to-blue-950/98 backdrop-blur-md"
+                >
+                  {/* Animated background gradient circles */}
+                  <motion.div
+                    animate={{
+                      scale: [1, 1.2, 1],
+                      rotate: [0, 180, 360]
+                    }}
+                    transition={{
+                      duration: 4,
+                      repeat: Infinity,
+                      ease: "linear"
+                    }}
+                    className="absolute inset-0 opacity-20"
+                    style={{
+                      background: 'radial-gradient(circle at 30% 50%, rgba(168, 85, 247, 0.4) 0%, transparent 50%), radial-gradient(circle at 70% 50%, rgba(59, 130, 246, 0.4) 0%, transparent 50%)'
+                    }}
+                  />
+                  
+                  {/* Success Icon with Animation */}
+                  <motion.div
+                    initial={{ scale: 0, rotate: -180 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ 
+                      type: "spring",
+                      stiffness: 180,
+                      damping: 12,
+                      duration: 0.8
+                    }}
+                    className="mb-8 relative z-10"
+                  >
+                    <div className="relative">
+                      {/* Multiple pulsing rings */}
+                      <motion.div
+                        animate={{ 
+                          scale: [1, 1.5, 1],
+                          opacity: [0.6, 0, 0.6]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                        className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500/40 to-blue-500/40 blur-md"
+                      />
+                      <motion.div
+                        animate={{ 
+                          scale: [1, 1.3, 1],
+                          opacity: [0.4, 0, 0.4]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: 0.5
+                        }}
+                        className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/40 to-purple-500/40 blur-md"
+                      />
+                      
+                      {/* Check circle with glow */}
+                      <div className="relative w-28 h-28 rounded-full bg-gradient-to-br from-purple-500 via-purple-600 to-blue-600 flex items-center justify-center shadow-2xl shadow-purple-500/60">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-400/20 to-blue-400/20 animate-pulse" />
+                        <motion.svg
+                          initial={{ pathLength: 0, opacity: 0 }}
+                          animate={{ pathLength: 1, opacity: 1 }}
+                          transition={{ duration: 0.6, delay: 0.4, ease: "easeOut" }}
+                          className="w-16 h-16 text-white relative z-10"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <motion.path
+                            strokeWidth={3}
+                            d="M5 13l4 4L19 7"
+                            filter="drop-shadow(0 2px 4px rgba(0,0,0,0.3))"
+                          />
+                        </motion.svg>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Success Text */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5, duration: 0.5 }}
+                    className="text-center px-6 relative z-10"
+                  >
+                    <motion.h3 
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.6, type: "spring" }}
+                      className="text-3xl font-bold bg-gradient-to-r from-purple-200 via-white to-blue-200 bg-clip-text text-transparent mb-3"
+                    >
+                      Bridge Complete! ✨
+                    </motion.h3>
+                    <p className="text-purple-100 text-base font-medium">
+                      Successfully bridged {transaction.amount} {transaction.token}
+                    </p>
+                    <motion.p 
+                      animate={{ opacity: [0.4, 0.8, 0.4] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="text-purple-300/60 text-xs mt-3"
+                    >
+                      Closing in 3 seconds...
+                    </motion.p>
+                  </motion.div>
+
+                  {/* Sparkle particles */}
+                  {[...Array(16)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ 
+                        opacity: 0,
+                        scale: 0,
+                        x: 0,
+                        y: 0
+                      }}
+                      animate={{ 
+                        opacity: [0, 1, 0.8, 0],
+                        scale: [0, 1.5, 1, 0],
+                        x: Math.cos((i * 360) / 16 * Math.PI / 180) * (100 + Math.random() * 80),
+                        y: Math.sin((i * 360) / 16 * Math.PI / 180) * (100 + Math.random() * 80),
+                        rotate: [0, 180]
+                      }}
+                      transition={{
+                        duration: 2,
+                        delay: 0.3 + (i * 0.05),
+                        ease: "easeOut"
+                      }}
+                      className="absolute"
+                      style={{
+                        left: '50%',
+                        top: '50%'
+                      }}
+                    >
+                      <div 
+                        className="w-1 h-1 rounded-full"
+                        style={{
+                          background: i % 2 === 0 
+                            ? 'linear-gradient(135deg, #a855f7, #3b82f6)' 
+                            : 'linear-gradient(135deg, #3b82f6, #a855f7)',
+                          boxShadow: i % 2 === 0
+                            ? '0 0 8px rgba(168, 85, 247, 0.8)'
+                            : '0 0 8px rgba(59, 130, 246, 0.8)'
+                        }}
+                      />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Header */}
             <div className="flex items-center justify-center p-4 pb-2 border-b border-gray-900 bg-gray-950">
               <div className="flex items-center gap-2">

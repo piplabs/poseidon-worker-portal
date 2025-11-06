@@ -10,8 +10,11 @@ export type TransactionStatus =
   | 'waiting_proof_signature'    // Waiting for user to sign proof transaction
   | 'proof_submitted'            // Proof transaction sent to network
   | 'proof_confirmed'            // Proof transaction confirmed on-chain
-  | 'waiting_resolve_signature'  // Waiting for user to sign resolve transaction
-  | 'resolving_game'             // Resolve transaction sent to network
+  | 'waiting_resolve_signature'  // Waiting for user to sign resolve claims transaction
+  | 'resolving_claims'           // Resolve claims transaction sent to network
+  | 'claims_resolved'            // Resolve claims confirmed, ready for resolve game
+  | 'waiting_resolve_game_signature' // Waiting for user to sign resolve game transaction
+  | 'resolving_game'             // Resolve game transaction sent to network
   | 'game_resolved'              // Game resolved and confirmed on-chain
   | 'waiting_finalize_signature' // Waiting for user to sign finalize transaction
   | 'finalizing'                 // Finalize transaction sent to network

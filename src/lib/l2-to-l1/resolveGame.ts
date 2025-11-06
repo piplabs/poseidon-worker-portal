@@ -169,11 +169,8 @@ export async function resolveGame({
       console.log(`   Resolving all ${claimDataLen} claims starting from root (index 0)...`);
       console.log(`   This will recursively resolve all child claims in the correct order`);
       
-      // Update status to waiting_resolve_signature right before prompting wallet
-      if (updateTransactionStatus) {
-        updateTransactionStatus('waiting_resolve_signature');
-        console.log('   📝 Status updated: waiting_resolve_signature');
-      }
+      // Note: Status will be updated to 'waiting_resolve_signature' only when wallet confirms
+      // to prevent UI flashing back to previous steps
       
       // Resolve starting from the root claim (index 0) with numToResolve set to total number of claims
       // This will resolve all claims in the game in the correct dependency order
@@ -193,11 +190,7 @@ export async function resolveGame({
       // If there are no claims, we can directly resolve the game
       console.log('\n🎯 Resolving the game...');
       
-      // Update status to waiting_resolve_signature right before prompting wallet
-      if (updateTransactionStatus) {
-        updateTransactionStatus('waiting_resolve_signature');
-        console.log('   📝 Status updated: waiting_resolve_signature');
-      }
+      // Note: Status will be updated when wallet confirms to prevent UI flashing
       
       writeResolveGameContract({
         address: gameAddress as `0x${string}`,

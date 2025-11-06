@@ -687,7 +687,7 @@ export default function Home() {
                       ) : (
                         <button
                           onClick={handleClaimRewards}
-                          disabled={isClaimRewardsPending || !rewardEpochId}
+                          disabled={isClaimRewardsPending || !rewardEpochId || !workerInfo.isActive}
                           className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isClaimRewardsPending ? "Claiming..." : isClaimRewardsSuccess ? "Claimed!" : "Claim Rewards"}
