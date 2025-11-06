@@ -7,6 +7,7 @@ import { WithdrawalStepsModal } from "@/components/withdrawal-steps-modal";
 import { ChevronDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useBalance, useSwitchChain, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { parseUnits, createPublicClient, http, decodeEventLog } from "viem";
 import { motion } from "motion/react";
 import Image from "next/image";
@@ -100,6 +101,7 @@ export function BridgeInterface() {
   const { address } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
   
   // Notification helper (no-op for now, can be enhanced later)
   const addNotification = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
@@ -1486,6 +1488,11 @@ export function BridgeInterface() {
 
   // Handlers for withdrawal modal actions
   const handleProveWithdrawal = useCallback(() => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+
     if (!activeWithdrawalTxId) return;
 
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
@@ -1531,9 +1538,14 @@ export function BridgeInterface() {
       .finally(() => {
         processingTxs.current.delete(`prove_${tx.id}`);
       });
-  }, [activeWithdrawalTxId, submitProof]);
+  }, [activeWithdrawalTxId, submitProof, address, openConnectModal]);
   
   const handleResolveGame = useCallback(async () => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+
     if (!activeWithdrawalTxId) return;
     
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
@@ -1566,9 +1578,14 @@ export function BridgeInterface() {
         // Always clear the processing flag on error
         processingTxs.current.delete(`resolve_${tx.id}`);
       });
-  }, [activeWithdrawalTxId, resolveGame]);
+  }, [activeWithdrawalTxId, resolveGame, address, openConnectModal]);
   
   const handleResolveGameFinal = useCallback(() => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+
     if (!activeWithdrawalTxId) return;
     
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
@@ -1608,7 +1625,7 @@ export function BridgeInterface() {
     setTimeout(() => {
       processingTxs.current.delete(`resolve_game_final_${tx.id}`);
     }, 1000);
-  }, [activeWithdrawalTxId, proofSubmissionData, writeResolveGameContract]);
+  }, [activeWithdrawalTxId, proofSubmissionData, writeResolveGameContract, address, openConnectModal]);
   
   const handleCloseWithdrawalModal = useCallback(() => {
     // Clean up temporary transaction if it exists
@@ -1628,6 +1645,11 @@ export function BridgeInterface() {
   }, []);
 
   const handleFinalizeWithdrawal = useCallback(() => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+
     if (!activeWithdrawalTxId) return;
     
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
@@ -1661,10 +1683,15 @@ export function BridgeInterface() {
       .finally(() => {
         processingTxs.current.delete(`finalize_${tx.id}`);
       });
-  }, [activeWithdrawalTxId, finalizeWithdrawal]);
+  }, [activeWithdrawalTxId, finalizeWithdrawal, address, openConnectModal]);
 
   const handleTransact = useCallback(async () => {
-    if (!address || !fromAmount || !isValidAmount(fromAmount)) {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+
+    if (!fromAmount || !isValidAmount(fromAmount)) {
       return;
     }
 
@@ -1818,7 +1845,7 @@ export function BridgeInterface() {
         setActiveWithdrawalTxId(null);
       }
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, l2Allowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance, toToken.symbol, activeWithdrawalTxId, isApprovePending, isApproveConfirming]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, l2Allowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance, toToken.symbol, activeWithdrawalTxId, isApprovePending, isApproveConfirming, openConnectModal, psdnL2Balance, addNotification]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -2052,7 +2079,14 @@ export function BridgeInterface() {
 
         {/* Action Button */}
         <div className="relative z-10 pt-2">
-        {!isOnCorrectNetwork ? (
+        {!address ? (
+          <button
+            onClick={() => openConnectModal?.()}
+            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Connect Wallet
+          </button>
+        ) : !isOnCorrectNetwork ? (
           <button
             onClick={handleSwitchNetwork}
             disabled={isSwitchingChain}
@@ -2063,7 +2097,7 @@ export function BridgeInterface() {
         ) : (
         <button
           onClick={handleTransact}
-          disabled={!address || !fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || isApprovePending || isApproveConfirming}
+          disabled={!fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || isApprovePending || isApproveConfirming}
           className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isApprovePending ? "Approving..." : 
