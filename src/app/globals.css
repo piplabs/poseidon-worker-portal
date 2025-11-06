@@ -146,6 +146,187 @@
   @apply bg-purple-500 text-white;
 }
 
+/* RainbowKit Custom Styling to match site design */
+[data-rk] {
+  --rk-border-radius: 1rem !important;
+}
 
+/* Modal backdrop - very transparent to see site clearly */
+[data-rk] > div[data-testid="rk-account-modal-backdrop"],
+[data-rk] > div[data-testid="rk-chain-modal-backdrop"] {
+  background-color: rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(8px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(130%) !important;
+}
+
+/* Modal container - ultra-transparent glassmorphic matching navbar buttons */
+[data-rk] > div[role="dialog"] > div {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.5)) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 1rem !important;
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 20px 25px -5px rgba(0, 0, 0, 0.4),
+    0 10px 10px -5px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Network/Wallet selection buttons - exactly matching navbar style */
+[data-rk] button[role="menuitem"],
+[data-rk] button[data-testid] {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.75rem !important;
+  transition: all 200ms !important;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.15),
+    0 2px 4px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-rk] button[role="menuitem"]:hover,
+[data-rk] button[data-testid]:hover {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1)) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.25),
+    0 4px 6px -2px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) scale(1.005) !important;
+}
+
+/* Selected network/wallet button - matches navbar active state */
+[data-rk] button[role="menuitem"][data-active="true"],
+[data-rk] button[aria-pressed="true"] {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1)) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 10px 15px -3px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Account modal content */
+[data-rk] [role="dialog"] > div > div {
+  background: transparent !important;
+}
+
+/* Make modal content more visible on transparent background */
+[data-rk] [role="dialog"] h1,
+[data-rk] [role="dialog"] h2,
+[data-rk] [role="dialog"] h3 {
+  color: white !important;
+  font-weight: 600 !important;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Balance display in modals */
+[data-rk] [role="dialog"] div[style*="color"] {
+  color: white !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* All text in modals should be white with shadow for readability */
+[data-rk] [role="dialog"] span,
+[data-rk] [role="dialog"] p,
+[data-rk] [role="dialog"] div {
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Secondary text - more readable */
+[data-rk] div[style*="rgba"] {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Close button - matching navbar style */
+[data-rk] button[aria-label*="Close"],
+[data-rk] button[aria-label*="Back"] {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 0.75rem !important;
+  transition: all 200ms !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-rk] button[aria-label*="Close"]:hover,
+[data-rk] button[aria-label*="Back"]:hover {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1)) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Copy address button - matching navbar style */
+[data-rk] button[aria-label*="Copy"] {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.75rem !important;
+  backdrop-filter: blur(8px) !important;
+  transition: all 200ms !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-rk] button[aria-label*="Copy"]:hover {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1)) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Disconnect button - matching navbar style */
+[data-rk] button[type="button"]:not([role]):not([aria-label]) {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.75rem !important;
+  color: white !important;
+  backdrop-filter: blur(8px) !important;
+  transition: all 200ms !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-rk] button[type="button"]:not([role]):not([aria-label]):hover {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1)) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Wallet option cards - matching navbar style */
+[data-rk] [data-testid*="rk-wallet-option"] {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.15),
+    0 2px 4px -1px rgba(0, 0, 0, 0.1) !important;
+  transition: all 200ms !important;
+}
+
+[data-rk] [data-testid*="rk-wallet-option"]:hover {
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1)) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.25),
+    0 4px 6px -2px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-2px) scale(1.01) !important;
+}
+
+/* Network icon containers - match theme */
+[data-rk] [role="menuitem"] img,
+[data-rk] [data-testid] img {
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Mobile specific adjustments */
+@media (max-width: 768px) {
+  [data-rk] > div[role="dialog"] > div {
+    border-radius: 1rem !important;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.6)) !important;
+  }
+}
 
 
