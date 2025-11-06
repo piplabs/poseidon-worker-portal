@@ -1565,6 +1565,9 @@ export function BridgeInterface() {
     
     processingTxs.current.add(`resolve_${tx.id}`);
     
+    // Update status to waiting for signature BEFORE calling resolveGame
+    TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_signature' });
+    
     // Call resolveGame - this will send resolve claims transaction
     resolveGame(tx.disputeGame.gameAddress, tx.id)
       .catch((error) => {
@@ -1593,8 +1596,8 @@ export function BridgeInterface() {
       return;
     }
     
-    // Guard: Only allow if resolve claims is complete (status is claims_resolved or waiting_resolve_game_signature)
-    if (tx.status !== 'claims_resolved' && tx.status !== 'waiting_resolve_game_signature') {
+    // Guard: Only allow if resolve claims is complete (status is claims_resolved)
+    if (tx.status !== 'claims_resolved') {
       return;
     }
     
@@ -1604,6 +1607,9 @@ export function BridgeInterface() {
     }
     
     processingTxs.current.add(`resolve_game_final_${tx.id}`);
+    
+    // Update status to waiting for signature BEFORE calling writeResolveGameContract
+    TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_game_signature' });
     
     // Get the dispute game address from proof submission data
     const gameAddress = proofSubmissionData.disputeGame.gameAddress;
@@ -1668,6 +1674,9 @@ export function BridgeInterface() {
     }
     
     processingTxs.current.add(`finalize_${tx.id}`);
+    
+    // Update status to waiting for signature BEFORE calling finalizeWithdrawal
+    TransactionStorage.update({ id: tx.id, status: 'waiting_finalize_signature' });
     
     // Call finalizeWithdrawal - this will prompt user's wallet
     finalizeWithdrawal(tx.withdrawalDetails, tx.id)
