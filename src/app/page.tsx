@@ -3,12 +3,9 @@
 import { useState, useEffect } from "react";
 import { BridgeInterface } from "@/components/bridge-interface";
 import { Navbar } from "@/components/navbar";
-import { Button } from "@/components/ui/button";
 import { 
   useWriteMintPsdnMint, 
   useWriteSubnetControlPlaneRegisterWorkerWithCapacity,
-  useReadMintPsdnAllowance,
-  useWriteMintPsdnApprove,
   useWriteSubnetControlPlaneRequestUnstake,
   useWriteSubnetControlPlaneWithdrawStake,
   useReadSubnetControlPlaneGetWorkerInfo,
@@ -16,7 +13,6 @@ import {
   useReadSubnetControlPlaneGetWorkerRewards,
   useWriteSubnetControlPlaneClaimRewardsFor,
   useReadSubnetControlPlaneGetMinimumStake,
-  useReadSubnetControlPlaneGetConfig,
   useReadSubnetControlPlanePoseidonToken,
   useReadMintPsdnBalanceOf
 } from "@/generated";
@@ -43,15 +39,7 @@ export default function Home() {
   
   const isOnL2 = chainId === CHAIN_IDS.L2;
   
-  const { writeContract, isPending, isSuccess, error } = useWriteMintPsdnMint();
-  
-  // Read SubnetControlPlane config
-  const { data: subnetConfig } = useReadSubnetControlPlaneGetConfig({
-    query: { 
-      enabled: isOnL2,
-    },
-    chainId: CHAIN_IDS.L2,
-  });
+  const { writeContract, isPending, error } = useWriteMintPsdnMint();
   
   // Read the poseidon token address
   const { data: poseidonToken } = useReadSubnetControlPlanePoseidonToken({
@@ -398,9 +386,9 @@ export default function Home() {
     const fetchQueues = async () => {
       try {
         const response = await fetch('https://subnet-mgmt-console-api.psdn.ai/api/v1/queues');
-        const data = await response.json();
+        const data = await response.json() as { items?: Array<{ queueName: string }> };
         if (data.items && Array.isArray(data.items)) {
-          const queueNames = data.items.map((item: any) => item.queueName);
+          const queueNames = data.items.map((item) => item.queueName);
           setQueues(queueNames);
         }
       } catch (error) {
