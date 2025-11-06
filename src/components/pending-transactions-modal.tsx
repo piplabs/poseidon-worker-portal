@@ -27,7 +27,10 @@ function getStatusLabel(status: TransactionStatus): string {
     waiting_proof_signature: 'Waiting for Proof Signature',
     proof_submitted: 'Proof Submitted to L1',
     proof_confirmed: 'Proof Confirmed on L1',
-    waiting_resolve_signature: 'Waiting for Resolve Signature',
+    waiting_resolve_signature: 'Waiting for Resolve Claims Signature',
+    resolving_claims: 'Resolving Claims',
+    claims_resolved: 'Claims Resolved',
+    waiting_resolve_game_signature: 'Waiting for Resolve Game Signature',
     resolving_game: 'Resolving Dispute Game',
     game_resolved: 'Game Resolved on L1',
     waiting_finalize_signature: 'Waiting for Finalize Signature',
@@ -61,8 +64,11 @@ function getProgress(status: TransactionStatus): number {
     waiting_proof_signature: 55,
     proof_submitted: 60,
     proof_confirmed: 65,
-    waiting_resolve_signature: 70,
-    resolving_game: 75,
+    waiting_resolve_signature: 68,
+    resolving_claims: 70,
+    claims_resolved: 72,
+    waiting_resolve_game_signature: 74,
+    resolving_game: 76,
     game_resolved: 85,
     waiting_finalize_signature: 90,
     finalizing: 95,
@@ -205,13 +211,19 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
 
                         {/* Direction Badge */}
                         <div className="flex-shrink-0">
-                          <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gray-800/80 text-gray-400 border border-gray-700/60 font-medium">
-                            {tx.type === 'L1_TO_L2' ? (
-                              <>L1 <span className="mx-0.5 text-gray-600">→</span> L2</>
-                            ) : (
-                              <>L2 <span className="mx-0.5 text-gray-600">→</span> L1</>
-                            )}
-                          </span>
+                          {tx.type === 'L1_TO_L2' ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-300 border border-blue-500/30 font-medium">
+                              <span className="text-blue-400">L1</span>
+                              <span className="mx-0.5 text-gray-500">→</span>
+                              <span className="text-purple-400">L2</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-purple-300 border border-purple-500/30 font-medium">
+                              <span className="text-purple-400">L2</span>
+                              <span className="mx-0.5 text-gray-500">→</span>
+                              <span className="text-blue-400">L1</span>
+                            </span>
+                          )}
                         </div>
 
                         {/* Spacer */}
