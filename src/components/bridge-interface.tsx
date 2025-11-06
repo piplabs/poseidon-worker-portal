@@ -1915,20 +1915,20 @@ export function BridgeInterface() {
           onFinalize={handleFinalizeWithdrawal}
         />
       )}
-      <div className="w-full max-w-2xl mx-auto p-2">
+      <div className="w-full max-w-2xl mx-auto p-2 sm:p-4">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="bg-card text-card-foreground border border-border/50 rounded-3xl p-8 space-y-6 relative shadow-xl"
+        className="bg-card text-card-foreground border border-border/50 rounded-3xl p-4 sm:p-8 space-y-6 relative shadow-xl"
         style={{
           transition: 'none'
         }}
       >
-        {/* From and To Chain Selection - Side by Side */}
-        <div className="flex items-center justify-between gap-4 relative z-10">
+        {/* From and To Chain Selection - Stacks on mobile, side by side on desktop */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative z-10">
           {/* From Chain */}
-          <div className="flex-1 bg-muted/30 border border-border/30 rounded-2xl p-5 hover:border-border/50 transition-all duration-200">
+          <div className="flex-1 bg-muted/30 border border-border/30 rounded-2xl p-4 sm:p-5 hover:border-border/50 transition-all duration-200">
             <div className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wide">From</div>
             <div className="flex items-center space-x-3">
               <div className={`w-10 h-10 rounded-full ${fromToken.color} flex items-center justify-center flex-shrink-0`}>
@@ -1968,19 +1968,20 @@ export function BridgeInterface() {
             </div>
           </div>
 
-          {/* Swap Button - Horizontal arrows between From and To */}
-          <div className="flex items-center justify-center relative z-10 -mx-1">
+          {/* Swap Button - Centered on mobile, between cards on desktop */}
+          <div className="flex items-center justify-center relative z-10 md:-mx-1">
             <Button
               onClick={handleSwap}
               className="rounded-full p-2.5 h-10 w-10 bg-muted/40 border border-border/30 hover:bg-muted/60 hover:border-border/50 transition-all duration-200 shadow-sm"
               variant="outline"
             >
-              <ArrowLeftRight className="h-4 w-4" />
+              <ArrowLeftRight className="h-4 w-4 md:block hidden" />
+              <ArrowUpDown className="h-4 w-4 md:hidden" />
             </Button>
           </div>
 
           {/* To Chain */}
-          <div className="flex-1 bg-muted/30 border border-border/30 rounded-2xl p-5 hover:border-border/50 transition-all duration-200">
+          <div className="flex-1 bg-muted/30 border border-border/30 rounded-2xl p-4 sm:p-5 hover:border-border/50 transition-all duration-200">
             <div className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wide">To</div>
             <div className="flex items-center space-x-3">
               <div className={`w-10 h-10 rounded-full ${toToken.color} flex items-center justify-center flex-shrink-0`}>
@@ -2022,8 +2023,8 @@ export function BridgeInterface() {
         </div>
 
         {/* Single Amount Input Field */}
-        <div className="bg-muted/30 border border-border/30 rounded-2xl p-5 space-y-4 relative z-10 hover:border-border/50 transition-all duration-200">
-          <div className="flex items-center justify-between gap-3">
+        <div className="bg-muted/30 border border-border/30 rounded-2xl p-4 sm:p-5 space-y-4 relative z-10 hover:border-border/50 transition-all duration-200">
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
             <input
               type="text"
               inputMode="decimal"
@@ -2033,13 +2034,13 @@ export function BridgeInterface() {
               }}
               onBlur={handleFromAmountBlur}
               placeholder="0"
-              className="text-4xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full placeholder:text-muted-foreground/30 flex-1"
+              className="text-2xl sm:text-4xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full placeholder:text-muted-foreground/30 flex-1 min-w-0"
               disabled={false}
             />
-            <div className="flex items-center">
+            <div className="flex items-center flex-shrink-0">
               <Button
                 onClick={() => setIsTokenSelectorOpen(true)}
-                className="h-12 px-4 bg-background/60 border border-input/30 rounded-xl hover:bg-background/80 hover:border-input/50 transition-all duration-200 flex items-center space-x-2 shadow-sm"
+                className="h-10 sm:h-12 px-3 sm:px-4 bg-background/60 border border-input/30 rounded-xl hover:bg-background/80 hover:border-input/50 transition-all duration-200 flex items-center space-x-2 shadow-sm"
               >
                 <div className={`w-6 h-6 rounded-full ${fromToken.color} flex items-center justify-center`}>
                   {fromToken.logo === 'psdn-svg' ? (
@@ -2060,13 +2061,13 @@ export function BridgeInterface() {
                     <span className="text-white font-bold text-xs">{fromToken.logo}</span>
                   )}
                 </div>
-                <span className="text-foreground font-semibold">{fromToken.symbol}</span>
+                <span className="text-foreground font-semibold text-sm sm:text-base">{fromToken.symbol}</span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
           </div>
-          <div className="flex items-center justify-between">
-            <div className="text-muted-foreground text-sm">{fromToken.balance} {fromToken.symbol} available</div>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-muted-foreground text-xs sm:text-sm">{fromToken.balance} {fromToken.symbol} available</div>
             <button
               onClick={handleMaxClick}
               className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"

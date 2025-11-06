@@ -377,7 +377,7 @@ export default function Home() {
     <>
       <Navbar currentView={currentView} onViewChange={setCurrentView} />
       <main 
-        className="min-h-screen bg-black text-white flex items-center justify-center p-4 pt-24 relative overflow-hidden"
+        className="min-h-screen bg-black text-white flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-24 relative overflow-hidden"
         style={{
           backgroundImage: 'url(/hero-bg.svg)',
           backgroundSize: 'cover',
