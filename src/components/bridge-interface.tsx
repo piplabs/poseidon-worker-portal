@@ -529,13 +529,13 @@ export function BridgeInterface() {
       setMonitoredProofTxHash(null);
       
       // Update transaction status to proof_confirmed
-      // This enables the challenge period countdown and prepares for user to click "Resolve"
+      // This enables the user to immediately click "Resolve Claims"
       if (tx) {
         TransactionStorage.update({ 
           id: tx.id, 
           status: 'proof_confirmed',
           l1ProofTxHash: proofTxHash as string,
-          proofConfirmedAt: Date.now(), // Store timestamp for countdown calculation
+          proofConfirmedAt: Date.now(), // Store timestamp for record keeping
         });
       }
     }
