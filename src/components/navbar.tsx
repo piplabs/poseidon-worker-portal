@@ -14,7 +14,15 @@ interface NavbarProps {
   onViewChange?: (view: 'bridge' | 'mint' | 'stake') => void;
 }
 
-// Component to display wallet balances - hooks must be called at component level
+const formatBalance = (balance: string) => {
+  const num = parseFloat(balance);
+  if (num === 0) return '0';
+  if (num < 0.0001) return '<0.0001';
+  if (num < 1) return num.toFixed(4);
+  if (num < 10) return num.toFixed(3);
+  return num.toFixed(2);
+};
+
 function WalletBalances({ address }: { address: `0x${string}` }) {
   const { data: l1Balance } = useBalance({
     address,
@@ -33,15 +41,6 @@ function WalletBalances({ address }: { address: `0x${string}` }) {
       refetchInterval: 10000,
     },
   });
-
-  const formatBalance = (balance: string) => {
-    const num = parseFloat(balance);
-    if (num === 0) return '0';
-    if (num < 0.0001) return '<0.0001';
-    if (num < 1) return num.toFixed(4);
-    if (num < 10) return num.toFixed(3);
-    return num.toFixed(2);
-  };
 
   return (
     <>
@@ -86,15 +85,6 @@ function MobileWalletBalances({ address }: { address: `0x${string}` }) {
       refetchInterval: 10000,
     },
   });
-
-  const formatBalance = (balance: string) => {
-    const num = parseFloat(balance);
-    if (num === 0) return '0';
-    if (num < 0.0001) return '<0.0001';
-    if (num < 1) return num.toFixed(4);
-    if (num < 10) return num.toFixed(3);
-    return num.toFixed(2);
-  };
 
   return (
     <div className="relative grid grid-cols-2 gap-3">

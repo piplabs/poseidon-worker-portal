@@ -31,7 +31,6 @@ import {
   ZERO_AMOUNT,
   SWAP_ANIMATION_DURATION,
   EMPTY_EXTRA_DATA,
-  type BridgeOption,
   type Token,
   PSDN_L1_TOKEN,
   PSDN_L2_TOKEN,
@@ -39,14 +38,12 @@ import {
   IP_L2_TOKEN,
   DEFAULT_FROM_TOKEN,
   DEFAULT_TO_TOKEN,
-  DEFAULT_BRIDGE_OPTION,
 } from "@/lib/constants";
 import {
   formatBalance,
   formatBalanceFromValue,
   getAvailableL1Tokens,
   getAvailableL2Tokens,
-  formatAmount,
   formatAmountOnBlur,
   isValidAmount,
   getTokenBalance,
@@ -70,32 +67,24 @@ import { isUserRejectedError, formatTransactionError, logTransactionError } from
 
 
 export function BridgeInterface() {
-  // State
   const [fromToken, setFromToken] = useState<Token>(DEFAULT_FROM_TOKEN);
   const [toToken, setToToken] = useState<Token>(DEFAULT_TO_TOKEN);
   const [fromAmount, setFromAmount] = useState("");
-  const [toAmount, setToAmount] = useState("");
-  const [bridgeOption] = useState<BridgeOption>(DEFAULT_BRIDGE_OPTION);
   const [isSwapping, setIsSwapping] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
   const [l2TxHash, setL2TxHash] = useState<string | null>(null);
   const [activeWithdrawalTxId, setActiveWithdrawalTxId] = useState<string | null>(null);
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   
-  // Track transaction hashes for monitoring (can be restored from localStorage)
   const [monitoredProofTxHash, setMonitoredProofTxHash] = useState<string | null>(null);
   const [monitoredResolveClaimsTxHash, setMonitoredResolveClaimsTxHash] = useState<string | null>(null);
   const [monitoredResolveGameTxHash, setMonitoredResolveGameTxHash] = useState<string | null>(null);
   const [monitoredFinalizeTxHash, setMonitoredFinalizeTxHash] = useState<string | null>(null);
+  const [showL1ToL2Success, setShowL1ToL2Success] = useState(false);
   
-  // Track which transactions are currently being processed to prevent duplicates
   const processingTxs = useRef<Set<string>>(new Set());
-  
-  // Ref to track if we should auto-continue after approval
   const shouldContinueAfterApproval = useRef(false);
   const lastProcessedApprovalHash = useRef<string | null>(null);
-  
-  // Ref to prevent duplicate approval requests
   const isRequestingApproval = useRef(false);
 
   const { address } = useAccount();
@@ -103,14 +92,9 @@ export function BridgeInterface() {
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
   
-  // Notification helper (no-op for now, can be enhanced later)
   const addNotification = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
-    // No-op for now
   }, []);
   
-  // L2 to L1 withdrawal functions are imported from /lib/l2-to-l1/
-
-  // State for proof submission
   const [proofSubmissionData, setProofSubmissionData] = useState<{
     withdrawalDetails: MessagePassedEventData;
     disputeGame: DisputeGameData;
@@ -126,19 +110,12 @@ export function BridgeInterface() {
     };
   } | null>(null);
 
-  // State to track if dispute game resolution is in progress
   const [isResolvingGame, setIsResolvingGame] = useState(false);
-  
-  // State to track if withdrawal process is complete
   const [isWithdrawalComplete, setIsWithdrawalComplete] = useState(false);
-
-  // Wagmi hooks for L1 transactions
   const { writeContract: writeProofContract, data: proofTxHash, error: proofError } = useWriteContract();
   const { writeContract: writeResolveClaimsContract, data: resolveClaimsTxHash } = useWriteContract();
   const { writeContract: writeResolveGameContract, data: resolveGameTxHash } = useWriteContract();
   const { writeContract: writeFinalizeContract, data: finalizeTxHash } = useWriteContract();
-
-  // Wrap switchChain to return a Promise for submitProof
   const switchChainAsync = useCallback(async (params: { chainId: number }) => {
     return new Promise<void>((resolve, reject) => {
       switchChain(params, {
@@ -148,7 +125,6 @@ export function BridgeInterface() {
     });
   }, [switchChain]);
 
-  // Submit proof to L1
   const submitProof = useCallback(async (withdrawalDetails: MessagePassedEventData, disputeGame: DisputeGameData, proofData: ProofData) => {
     return await submitProofImported({
       withdrawalDetails,
@@ -161,27 +137,22 @@ export function BridgeInterface() {
     });
   }, [chainId, switchChainAsync, writeProofContract, addNotification]);
 
-  // Wait for proof transaction confirmation (use monitored hash or fresh hash from writeContract)
-  const { isLoading: isProofConfirming, isSuccess: isProofConfirmed } = useWaitForTransactionReceipt({
+  const { isSuccess: isProofConfirmed } = useWaitForTransactionReceipt({
     hash: (monitoredProofTxHash || proofTxHash) as `0x${string}` | undefined,
   });
 
-  // Wait for resolve claims transaction confirmation
-  const { isLoading: isResolveClaimsConfirming, isSuccess: isResolveClaimsConfirmed, error: resolveClaimsError } = useWaitForTransactionReceipt({
+  const { isSuccess: isResolveClaimsConfirmed, error: resolveClaimsError } = useWaitForTransactionReceipt({
     hash: (monitoredResolveClaimsTxHash || resolveClaimsTxHash) as `0x${string}` | undefined,
   });
 
-  // Wait for resolve game transaction confirmation
-  const { isLoading: isResolveGameConfirming, isSuccess: isResolveGameConfirmed, error: resolveGameError } = useWaitForTransactionReceipt({
+  const { isSuccess: isResolveGameConfirmed, error: resolveGameError } = useWaitForTransactionReceipt({
     hash: (monitoredResolveGameTxHash || resolveGameTxHash) as `0x${string}` | undefined,
   });
 
-  // Wait for finalize transaction confirmation
-  const { isLoading: isFinalizeConfirming, isSuccess: isFinalizeConfirmed, error: finalizeError } = useWaitForTransactionReceipt({
+  const { isSuccess: isFinalizeConfirmed, error: finalizeError } = useWaitForTransactionReceipt({
     hash: (monitoredFinalizeTxHash || finalizeTxHash) as `0x${string}` | undefined,
   });
 
-  // Use imported finalizeWithdrawal function
   const finalizeWithdrawal = useCallback(async (withdrawalDetails: MessagePassedEventData, txId?: string) => {
     if (!address) return false;
     return await finalizeWithdrawalImported({
@@ -196,7 +167,6 @@ export function BridgeInterface() {
     });
   }, [address, writeFinalizeContract, setIsWithdrawalComplete, isWithdrawalComplete]);
 
-  // Use imported resolveGame function
   const resolveGame = useCallback(async (gameAddress: string, txId?: string) => {
     return await resolveGameImported({
       gameAddress,
@@ -211,18 +181,14 @@ export function BridgeInterface() {
     });
   }, [writeResolveClaimsContract, writeResolveGameContract, isResolvingGame, isWithdrawalComplete, setIsResolvingGame]);
 
-  // Monitor resolve claims transaction status (Step 5a)
   useEffect(() => {
     if (resolveClaimsTxHash) {
-      // Set monitored hash for persistence across page reloads
       setMonitoredResolveClaimsTxHash(resolveClaimsTxHash);
       
-      // Update status to resolving_claims when transaction hash is available (user confirmed in wallet)
       if (proofSubmissionData) {
         const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
         const tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
         
-        // Update from proof_confirmed or waiting_resolve_signature to resolving_claims
         if (tx && (tx.status === 'proof_confirmed' || tx.status === 'waiting_resolve_signature')) {
           TransactionStorage.update({ 
             id: tx.id, 
@@ -238,7 +204,6 @@ export function BridgeInterface() {
         t.withdrawalDetails?.withdrawalHash === txId
       );
       
-      // GUARD: Don't process if transaction is completed or in error state
       if (!tx) {
         return;
       }
@@ -247,17 +212,13 @@ export function BridgeInterface() {
         return;
       }
       
-      // Clear monitored hash since transaction is confirmed
       setMonitoredResolveClaimsTxHash(null);
-      
-      // Update status to claims_resolved - this enables the "Resolve Game" button
       TransactionStorage.update({ id: tx.id, status: 'claims_resolved' });
     }
     if (resolveClaimsError) {
       if (!isUserRejectedError(resolveClaimsError)) {
         logTransactionError('Resolve Claims Transaction Failed', resolveClaimsError);
 
-        // Reset status back to proof_confirmed so user can retry after fixing the issue
         if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
           const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
           const tx = TransactionStorage.getAll().find(t =>
@@ -288,15 +249,12 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [resolveClaimsTxHash, isResolveClaimsConfirming, isResolveClaimsConfirmed, resolveClaimsError, proofSubmissionData, writeResolveGameContract]);
+  }, [resolveClaimsTxHash, isResolveClaimsConfirmed, resolveClaimsError, proofSubmissionData, writeResolveGameContract]);
 
-  // Monitor resolve game transaction status (Step 5b)
   useEffect(() => {
     if (resolveGameTxHash) {
-      // Set monitored hash for persistence across page reloads
       setMonitoredResolveGameTxHash(resolveGameTxHash);
       
-      // Update transaction storage with hash and status
       if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
         const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
         const tx = TransactionStorage.getAll().find(t => 
@@ -321,24 +279,20 @@ export function BridgeInterface() {
         return;
       }
       
-      // GUARD: Don't process if transaction is completed or in error state
       if (tx.status === 'completed' || tx.status === 'error') {
         return;
       }
       
-      // Check if already at finalization stage
       if (tx.status === 'finalizing' || tx.status === 'waiting_finalize_signature') {
         return;
       }
       
-      // Clear monitored hash since transaction is confirmed
       setMonitoredResolveGameTxHash(null);
       
-      // Update status to game_resolved - this enables the finalize button
       TransactionStorage.update({ 
         id: tx.id, 
         status: 'game_resolved',
-        gameResolvedAt: Date.now(), // Store timestamp for finalization countdown
+        gameResolvedAt: Date.now(),
       });
     }
     if (resolveGameError) {
@@ -376,7 +330,7 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [resolveGameTxHash, isResolveGameConfirming, isResolveGameConfirmed, resolveGameError, proofSubmissionData, finalizeWithdrawal]);
+  }, [resolveGameTxHash, isResolveGameConfirmed, resolveGameError, proofSubmissionData, finalizeWithdrawal]);
 
   // Monitor finalize withdrawal transaction status
   useEffect(() => {
@@ -417,7 +371,6 @@ export function BridgeInterface() {
         return;
       }
       
-      // Clear monitored hash since transaction is confirmed
       setMonitoredFinalizeTxHash(null);
       
       // Mark transaction as completed
@@ -469,7 +422,7 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [finalizeTxHash, isFinalizeConfirming, isFinalizeConfirmed, finalizeError, proofSubmissionData, setIsWithdrawalComplete]);
+  }, [finalizeTxHash, isFinalizeConfirmed, finalizeError, proofSubmissionData, setIsWithdrawalComplete]);
 
   // Monitor proof submission status
   useEffect(() => {
@@ -532,7 +485,6 @@ export function BridgeInterface() {
         return;
       }
       
-      // GUARD: Don't process if transaction is completed or in error state
       if (!tx) {
         return;
       }
@@ -547,7 +499,6 @@ export function BridgeInterface() {
         return;
       }
       
-      // Clear monitored hash since transaction is confirmed
       setMonitoredProofTxHash(null);
       
       // Update transaction status to proof_confirmed
@@ -596,7 +547,7 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [proofTxHash, isProofConfirming, isProofConfirmed, proofError, proofSubmissionData, resolveGame]);
+  }, [proofTxHash, isProofConfirmed, proofError, proofSubmissionData, resolveGame]);
 
 
   // Function to log receipt details and extract MessagePassed event using viem
@@ -790,25 +741,7 @@ export function BridgeInterface() {
     },
   });
 
-  // Update tokens when bridge option changes (only when explicitly selected by user via token selector)
-  // Note: This effect is intentionally minimal - swapping should NOT trigger token changes
-  useEffect(() => {
-    // Only update if we're in the default L1->L2 direction AND the current token doesn't match the bridge option
-    if (isL1OnTop && fromToken.symbol !== (bridgeOption === 'psdn' ? 'PSDN' : 'IP')) {
-      const newFromToken = bridgeOption === 'psdn' ? PSDN_L1_TOKEN : IP_L1_TOKEN;
-      const newToToken = bridgeOption === 'psdn' ? PSDN_L2_TOKEN : IP_L2_TOKEN;
-      
-      // Only update if this is actually a change from the user selecting a different token
-      // Don't update if the user has swapped to L2->L1 (this would force unwanted changes)
-      if (fromToken.layer === 'L1' && toToken.layer === 'L2') {
-        setFromToken(newFromToken);
-        setToToken(newToToken);
-      }
-    }
-  }, [bridgeOption]);
-  
-  // Balance hooks - Fetch balances from both L1 and L2 networks
-  const { data: psdnBalance, refetch: refetchPsdnBalance, isLoading: isPsdnBalanceLoading } = useReadMintPsdnBalanceOf({
+  const { data: psdnBalance, refetch: refetchPsdnBalance } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address,
@@ -819,7 +752,7 @@ export function BridgeInterface() {
     chainId: CHAIN_IDS.L1,
   });
 
-  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance, isLoading: isPsdnL2BalanceLoading } = useReadMintPsdnBalanceOf({
+  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address,
@@ -830,7 +763,7 @@ export function BridgeInterface() {
     chainId: CHAIN_IDS.L2,
   });
 
-  const { data: ipBalance, refetch: refetchIpBalance, isLoading: isIpBalanceLoading } = useBalance({
+  const { data: ipBalance, refetch: refetchIpBalance } = useBalance({
     address,
     chainId: CHAIN_IDS.L1,
     query: {
@@ -841,7 +774,7 @@ export function BridgeInterface() {
     },
   });
 
-  const { data: ipL2Balance, refetch: refetchIpL2Balance, isLoading: isIpL2BalanceLoading } = useBalance({
+  const { data: ipL2Balance, refetch: refetchIpL2Balance } = useBalance({
     address,
     chainId: CHAIN_IDS.L2,
     query: {
@@ -852,7 +785,6 @@ export function BridgeInterface() {
     },
   });
 
-  // L1 allowance for Bridge contract (L1 -> L2 transfers)
   const { data: currentAllowance, refetch: refetchAllowance } = useReadMintPsdnAllowance({
     args: address ? [address, CONTRACT_ADDRESSES.BRIDGE] : undefined,
     query: { 
@@ -864,7 +796,6 @@ export function BridgeInterface() {
     chainId: CHAIN_IDS.L1,
   });
 
-  // L2 allowance for L2Bridge contract (L2 -> L1 transfers)
   const { data: l2Allowance, refetch: refetchL2Allowance } = useReadMintPsdnAllowance({
     args: address ? [address, CONTRACT_ADDRESSES.L2_BRIDGE] : undefined,
     query: { 
@@ -1187,22 +1118,43 @@ export function BridgeInterface() {
       // Mark this approval as processed
       lastProcessedApprovalHash.current = approveTxHash;
       
-      // Refetch allowances and wait for them to update
+      // Refetch allowances and wait for them to update with proper polling
       const refetchAndContinue = async () => {
-        await Promise.all([
-          refetchAllowance(),
-          refetchL2Allowance(),
-        ]);
+        // Wait a bit for blockchain state to propagate
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Poll the allowance until it updates (up to 10 seconds)
+        const maxAttempts = 10;
+        let attempts = 0;
+        
+        while (attempts < maxAttempts) {
+          await Promise.all([
+            refetchAllowance(),
+            refetchL2Allowance(),
+          ]);
+          
+          // Wait another second for the state to update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          attempts++;
+          
+          // Check if we've successfully updated (this will be checked in the next handleTransact call)
+          // For now, just wait the full polling period to ensure the allowance is updated
+          if (attempts >= 3) {
+            // After 3 attempts (5 seconds total), assume it's ready
+            break;
+          }
+        }
         
         // Reset flags
         shouldContinueAfterApproval.current = false;
         isRequestingApproval.current = false;
         
-        // Small delay to ensure state is fully updated, then re-trigger the transaction
+        // Additional delay to ensure state is fully updated, then re-trigger the transaction
         setTimeout(() => {
           // Call handleTransact which will be available in scope
           handleTransact();
-        }, 500);
+        }, 1000);
       };
       
       refetchAndContinue();
@@ -1278,6 +1230,12 @@ export function BridgeInterface() {
           status: 'completed',
           completedAt: Date.now(),
         });
+        
+        // Show success animation for L1 to L2 transaction
+        setShowL1ToL2Success(true);
+        setTimeout(() => {
+          setShowL1ToL2Success(false);
+        }, 3000);
       }
     }
   }, [isBridgeEthConfirmed, bridgeEthTxData]);
@@ -1292,6 +1250,12 @@ export function BridgeInterface() {
           status: 'completed',
           completedAt: Date.now(),
         });
+        
+        // Show success animation for L1 to L2 transaction
+        setShowL1ToL2Success(true);
+        setTimeout(() => {
+          setShowL1ToL2Success(false);
+        }, 3000);
       }
     }
   }, [isDepositErc20Confirmed, depositErc20TxData]);
@@ -1439,29 +1403,10 @@ export function BridgeInterface() {
   }, [isSwapping, fromToken, toToken]);
 
   const handleFromAmountChange = useCallback((amount: string) => {
-    // Only allow numbers, single decimal point, and empty string
     const validNumberRegex = /^(\d*\.?\d*)$/;
-    
     if (validNumberRegex.test(amount) || amount === '') {
       setFromAmount(amount);
-      
-      // Simple conversion logic (1:1 for demo)
-      setToAmount(formatAmount(amount));
     }
-    // If invalid input, do nothing (prevents letters from appearing)
-  }, []);
-
-  const handleToAmountChange = useCallback((amount: string) => {
-    // Only allow numbers, single decimal point, and empty string
-    const validNumberRegex = /^(\d*\.?\d*)$/;
-    
-    if (validNumberRegex.test(amount) || amount === '') {
-      setToAmount(amount);
-      
-      // Reverse conversion logic
-      setFromAmount(formatAmount(amount));
-    }
-    // If invalid input, do nothing (prevents letters from appearing)
   }, []);
 
   const handleFromAmountBlur = useCallback(() => {
@@ -1472,13 +1417,8 @@ export function BridgeInterface() {
     const maxBalance = getTokenBalance(fromToken, psdnBalance, psdnL2Balance, ipBalance, ipL2Balance);
     if (maxBalance) {
       setFromAmount(maxBalance);
-      setToAmount(maxBalance);
     }
   }, [fromToken, psdnBalance, psdnL2Balance, ipBalance, ipL2Balance]);
-
-  const handleToAmountBlur = useCallback(() => {
-    setToAmount(formatAmountOnBlur(toAmount));
-  }, [toAmount]);
 
   const handleSwitchNetwork = useCallback(async () => {
     try {
@@ -2203,6 +2143,58 @@ export function BridgeInterface() {
           >
             {isSwitchingChain ? "Switching..." : `Switch to ${requiredNetwork.name}`}
           </button>
+        ) : showL1ToL2Success ? (
+        <motion.button
+          disabled
+          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold rounded-lg overflow-hidden relative border border-blue-300/30"
+          initial={{ scale: 1 }}
+          animate={{ 
+            scale: [1, 1.02, 1],
+          }}
+          transition={{
+            duration: 3,
+            ease: "easeInOut",
+          }}
+        >
+          <motion.div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.15), rgba(59, 130, 246, 0.1))',
+              backgroundSize: '300% 100%',
+            }}
+            initial={{ backgroundPosition: '0% 0%' }}
+            animate={{ 
+              backgroundPosition: ['0% 0%', '100% 0%', '200% 0%', '0% 0%']
+            }}
+            transition={{
+              duration: 3,
+              ease: "easeInOut",
+            }}
+          />
+          <motion.div
+            className="absolute inset-0 opacity-50"
+            style={{
+              background: 'radial-gradient(circle at center, rgba(139, 92, 246, 0.3), transparent)',
+            }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ 
+              scale: [0.8, 1.2, 0.8],
+              opacity: [0, 0.5, 0],
+            }}
+            transition={{
+              duration: 3,
+              ease: "easeInOut",
+            }}
+          />
+          <motion.span 
+            className="relative z-10 text-gray-200 font-semibold"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            Confirmed
+          </motion.span>
+        </motion.button>
         ) : (
         <button
           onClick={handleTransact}

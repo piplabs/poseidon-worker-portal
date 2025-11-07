@@ -23,11 +23,9 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('Error fetching queues:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-

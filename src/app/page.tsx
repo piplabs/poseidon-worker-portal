@@ -43,7 +43,6 @@ export default function Home() {
   
   const { writeContract, isPending, error } = useWriteMintPsdnMint();
   
-  // Read the poseidon token address
   const { data: poseidonToken } = useReadSubnetControlPlanePoseidonToken({
     query: { 
       enabled: isOnL2,
@@ -51,7 +50,6 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
-  // Stake tab - approval and registration hooks
   const { 
     writeContract: writeApproveStake, 
     isPending: isApproveStakePending,
@@ -59,7 +57,6 @@ export default function Home() {
     error: approveStakeError 
   } = useWriteContract();
   
-  // ERC20 ABI for approve and allowance
   const erc20Abi = [
     {
       type: 'function',
@@ -100,14 +97,11 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
-  // Refetch allowance when approval succeeds and auto-trigger register worker
   useEffect(() => {
     if (isApproveStakeSuccess) {
       refetchStakeAllowance();
       
-      // Automatically trigger register worker after approval
       if (stakeAmount && workerCapacity && selectedQueueName) {
-        // Validate capacity requirement before auto-triggering
         const requiredStake = parseInt(workerCapacity) * 100;
         if (requiredStake <= parseFloat(stakeAmount)) {
           handleRegisterWorker();
@@ -128,7 +122,6 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
-  // Unstake hooks
   const { 
     writeContract: writeRequestUnstake, 
     isPending: isRequestUnstakePending,
@@ -147,48 +140,7 @@ export default function Home() {
     isSuccess: isWithdrawStakeSuccess,
     error: withdrawStakeError 
   } = useWriteSubnetControlPlaneWithdrawStake();
-
-  // Worker info read
   const { data: workerInfo, refetch: refetchWorkerInfo } = useReadSubnetControlPlaneGetWorkerInfo({
-    args: address ? [address] : undefined,
-    query: { 
-      enabled: !!address && isOnL2,
-      refetchInterval: 5000, // Refetch every 5 seconds
-    },
-    chainId: CHAIN_IDS.L2,
-  });
-
-  // Worker queue read
-  const { data: workerQueue } = useReadSubnetControlPlaneGetWorkerQueue({
-    args: address ? [address] : undefined,
-    query: { 
-      enabled: !!address && isOnL2,
-      refetchInterval: 5000, // Refetch every 5 seconds
-    },
-    chainId: CHAIN_IDS.L2,
-  });
-
-  // Current epoch read
-  const { data: currentEpoch } = useReadSubnetControlPlaneGetCurrentEpoch({
-    query: { 
-      enabled: isOnL2,
-      refetchInterval: 5000, // Refetch every 5 seconds
-    },
-    chainId: CHAIN_IDS.L2,
-  });
-  
-  const currentEpochId = currentEpoch?.epochId;
-
-  // Minimum stake requirement read
-  const { data: minimumStake } = useReadSubnetControlPlaneGetMinimumStake({
-    query: { 
-      enabled: isOnL2,
-    },
-    chainId: CHAIN_IDS.L2,
-  });
-
-  // PSDN L2 balance for stake section
-  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address && isOnL2,
@@ -197,7 +149,40 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
-  // Claim rewards hooks (must come after currentEpochId)
+  const { data: workerQueue } = useReadSubnetControlPlaneGetWorkerQueue({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { data: currentEpoch } = useReadSubnetControlPlaneGetCurrentEpoch({
+    query: { 
+      enabled: isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+  
+  const currentEpochId = currentEpoch?.epochId;
+
+  const { data: minimumStake } = useReadSubnetControlPlaneGetMinimumStake({
+    query: { 
+      enabled: isOnL2,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
   const { data: workerRewards, refetch: refetchWorkerRewards } = useReadSubnetControlPlaneGetWorkerRewards({
     args: address && currentEpochId ? [address, currentEpochId] : undefined,
     query: { 
@@ -232,9 +217,7 @@ export default function Home() {
         args: [address, amount],
       });
     } catch (err) {
-      if (!isUserRejectedError(err)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(err);
     }
   };
 
@@ -257,9 +240,7 @@ export default function Home() {
         chainId: CHAIN_IDS.L2,
       });
     } catch (err) {
-      if (!isUserRejectedError(err)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(err);
     }
   };
 
@@ -286,10 +267,8 @@ export default function Home() {
       const amount = parseUnits(stakeAmount, 18);
       const capacity = BigInt(workerCapacity);
       
-      // Validate: capacity × 100 must be <= stake amount
       const requiredStake = capacity * BigInt(100);
       if (requiredStake > amount) {
-        console.error(`Insufficient stake: capacity ${capacity} requires ${formatUnits(requiredStake, 18)} PSDN but only ${stakeAmount} PSDN provided`);
         return;
       }
       
@@ -297,9 +276,7 @@ export default function Home() {
         args: [amount, capacity, selectedQueueName],
       });
     } catch (err) {
-      if (!isUserRejectedError(err)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(err);
     }
   };
 
@@ -314,9 +291,7 @@ export default function Home() {
         args: [],
       });
     } catch (err) {
-      if (!isUserRejectedError(err)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(err);
     }
   };
 
@@ -331,9 +306,7 @@ export default function Home() {
         args: [address],
       });
     } catch (err) {
-      if (!isUserRejectedError(err)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(err);
     }
   };
 
@@ -350,9 +323,7 @@ export default function Home() {
         args: [address, epochId],
       });
     } catch (err) {
-      if (!isUserRejectedError(err)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(err);
     }
   };
 
@@ -360,9 +331,7 @@ export default function Home() {
     try {
       await switchChain({ chainId: CHAIN_IDS.L2 });
     } catch (error) {
-      if (!isUserRejectedError(error)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(error);
     }
   };
 
@@ -370,20 +339,11 @@ export default function Home() {
     try {
       await switchChain({ chainId: CHAIN_IDS.L1 });
     } catch (error) {
-      if (!isUserRejectedError(error)) {
-        // Error silently ignored
-      }
+      isUserRejectedError(error);
     }
   };
 
   const isOnL1 = chainId === CHAIN_IDS.L1;
-
-  // Refetch allowance after approval succeeds
-  useEffect(() => {
-    if (isApproveStakeSuccess) {
-      refetchStakeAllowance();
-    }
-  }, [isApproveStakeSuccess, refetchStakeAllowance]);
 
   // Refetch worker info and balance after registration, unstake request, or withdrawal
   useEffect(() => {
