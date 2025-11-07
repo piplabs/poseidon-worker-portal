@@ -9,6 +9,7 @@ import {
   useWriteSubnetControlPlaneRequestUnstake,
   useWriteSubnetControlPlaneWithdrawStake,
   useReadSubnetControlPlaneGetWorkerInfo,
+  useReadSubnetControlPlaneGetWorkerQueue,
   useReadSubnetControlPlaneGetCurrentEpoch,
   useReadSubnetControlPlaneGetWorkerRewards,
   useWriteSubnetControlPlaneClaimRewardsFor,
@@ -28,6 +29,7 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
   const [mintAmount, setMintAmount] = useState("");
   const [stakeAmount, setStakeAmount] = useState("");
+  const [workerCapacity, setWorkerCapacity] = useState("");
   const [rewardEpochId, setRewardEpochId] = useState("");
   const [selectedQueueName, setSelectedQueueName] = useState("");
   const [queues, setQueues] = useState<string[]>([]);
@@ -98,10 +100,19 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
-  // Refetch allowance when approval succeeds
+  // Refetch allowance when approval succeeds and auto-trigger register worker
   useEffect(() => {
     if (isApproveStakeSuccess) {
       refetchStakeAllowance();
+      
+      // Automatically trigger register worker after approval
+      if (stakeAmount && workerCapacity && selectedQueueName) {
+        // Validate capacity requirement before auto-triggering
+        const requiredStake = parseInt(workerCapacity) * 100;
+        if (requiredStake <= parseFloat(stakeAmount)) {
+          handleRegisterWorker();
+        }
+      }
     }
   }, [isApproveStakeSuccess, refetchStakeAllowance]);
   
@@ -139,6 +150,16 @@ export default function Home() {
 
   // Worker info read
   const { data: workerInfo, refetch: refetchWorkerInfo } = useReadSubnetControlPlaneGetWorkerInfo({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000, // Refetch every 5 seconds
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  // Worker queue read
+  const { data: workerQueue } = useReadSubnetControlPlaneGetWorkerQueue({
     args: address ? [address] : undefined,
     query: { 
       enabled: !!address && isOnL2,
@@ -259,12 +280,18 @@ export default function Home() {
       openConnectModal?.();
       return;
     }
-    if (!stakeAmount) return;
+    if (!stakeAmount || !workerCapacity) return;
     
     try {
       const amount = parseUnits(stakeAmount, 18);
-      // Default capacity
-      const capacity = BigInt(1);
+      const capacity = BigInt(workerCapacity);
+      
+      // Validate: capacity × 100 must be <= stake amount
+      const requiredStake = capacity * BigInt(100);
+      if (requiredStake > amount) {
+        console.error(`Insufficient stake: capacity ${capacity} requires ${formatUnits(requiredStake, 18)} PSDN but only ${stakeAmount} PSDN provided`);
+        return;
+      }
       
       await writeRegisterWorker({
         args: [amount, capacity, selectedQueueName],
@@ -373,6 +400,19 @@ export default function Home() {
       refetchWorkerInfo();
     }
   }, [isClaimRewardsSuccess, refetchWorkerRewards, refetchWorkerInfo]);
+
+  // Validate and adjust capacity when stake amount changes
+  useEffect(() => {
+    if (workerCapacity && stakeAmount) {
+      const maxCapacity = Math.floor(parseFloat(stakeAmount) / 100);
+      const currentCapacity = parseInt(workerCapacity);
+      
+      // If current capacity exceeds max allowed, cap it
+      if (currentCapacity > maxCapacity) {
+        setWorkerCapacity(maxCapacity > 0 ? maxCapacity.toString() : "");
+      }
+    }
+  }, [stakeAmount, workerCapacity]);
 
   // Set default epoch to current epoch
   useEffect(() => {
@@ -613,18 +653,37 @@ export default function Home() {
                     {workerInfo && workerInfo.registeredAt > BigInt(0) && (
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-muted/30 rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-1">Registered At</p>
+                          <p className="text-xs text-muted-foreground mb-2">Registered At</p>
                           <p className="text-sm font-semibold text-foreground">
                             {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleDateString()}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleTimeString()}
                           </p>
                         </div>
                         <div className="bg-muted/30 rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-1">Total Stake</p>
+                          <p className="text-xs text-muted-foreground mb-2">Total Stake</p>
                           <p className="text-lg font-bold text-foreground">
-                            {formatUnits(workerInfo.stakedAmount, 18)} PSDN
+                            {formatUnits(workerInfo.stakedAmount, 18)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">PSDN</p>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Worker Capacity</p>
+                          <p className="text-lg font-bold text-foreground">
+                            {workerInfo.capacity.toString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Max concurrent tasks
+                          </p>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Queue</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {workerQueue || 'N/A'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Work queue name
                           </p>
                         </div>
                       </div>
@@ -678,10 +737,9 @@ export default function Home() {
                           <div className="flex items-center gap-2">
                             {psdnL2Balance && (
                               <span className="text-xs text-muted-foreground">
-                                {formatBalance(psdnL2Balance)} available
+                                {formatBalance(psdnL2Balance)} available PSDN
                               </span>
                             )}
-                            <span className="text-xs text-muted-foreground">PSDN</span>
                           </div>
                         </div>
                         <input
@@ -725,6 +783,50 @@ export default function Home() {
                         </div>
                       </div>
 
+                      {/* Capacity Selection */}
+                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Worker Capacity</span>
+                          <span className="text-xs text-muted-foreground">
+                            {stakeAmount && !isNaN(parseFloat(stakeAmount)) ? (
+                              `Max: ${Math.floor(parseFloat(stakeAmount) / 100)}`
+                            ) : (
+                              'Enter stake first'
+                            )}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={workerCapacity}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string and non-negative integers
+                            if (value === '' || /^\d+$/.test(value)) {
+                              // Validate against max capacity
+                              if (stakeAmount && value !== '') {
+                                const maxCapacity = Math.floor(parseFloat(stakeAmount) / 100);
+                                const numValue = parseInt(value);
+                                if (numValue <= maxCapacity && numValue >= 0) {
+                                  setWorkerCapacity(value);
+                                } else if (numValue > maxCapacity) {
+                                  // Cap at max capacity
+                                  setWorkerCapacity(maxCapacity.toString());
+                                }
+                              } else {
+                                setWorkerCapacity(value);
+                              }
+                            }
+                          }}
+                          placeholder="0"
+                          disabled={!stakeAmount || isNaN(parseFloat(stakeAmount))}
+                          className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Requires: {workerCapacity ? parseInt(workerCapacity) * 100 : 0} PSDN minimum
+                        </p>
+                      </div>
+
                       {/* Network Check, Approval, and Register Button */}
                       {!address ? (
                         <button
@@ -744,7 +846,7 @@ export default function Home() {
                       ) : (
                         <>
                           {/* Check if approval is needed */}
-                          {stakeAmount && selectedQueueName && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
+                          {stakeAmount && workerCapacity && workerCapacity !== "0" && selectedQueueName && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
                             <button
                               onClick={handleApproveStake}
                               disabled={isApproveStakePending || (!!approveStakeTxHash && !isApproveStakeSuccess)}
@@ -755,7 +857,15 @@ export default function Home() {
                           ) : (
                             <button
                               onClick={handleRegisterWorker}
-                              disabled={isRegisterWorkerPending || isRegisterWorkerConfirming || !stakeAmount || !selectedQueueName}
+                              disabled={
+                                isRegisterWorkerPending || 
+                                isRegisterWorkerConfirming || 
+                                stakeAmount === "" || 
+                                workerCapacity === "" || 
+                                workerCapacity === "0" ||
+                                selectedQueueName === "" ||
+                                (!!workerCapacity && !!stakeAmount && parseInt(workerCapacity) * 100 > parseFloat(stakeAmount))
+                              }
                               className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {(isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
