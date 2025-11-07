@@ -695,202 +695,264 @@ export default function Home() {
               {/* Actions Grid - Conditional rendering based on worker registration */}
               {/* Check if worker is NOT registered OR has withdrawn all stake (inactive) */}
               {(!workerInfo || workerInfo.registeredAt === BigInt(0) || workerInfo.stakedAmount === BigInt(0)) ? (
-                // When NOT registered or inactive with 0 stake: Show only Register Worker card, centered
-                <div className="flex justify-center mb-6">
+                // When NOT registered or inactive with 0 stake: Show registration layout
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6">
+                  {/* Info Card */}
                   <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.4 }}
-                    className="bg-card border rounded-xl p-6 space-y-4 w-full max-w-lg"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                    className="lg:col-span-2"
                   >
-                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                      <div>
-                        <h3 className="text-lg font-bold">Register Worker</h3>
-                        <p className="text-xs text-muted-foreground">Stake PSDN to register</p>
+                    <div className="bg-card border rounded-xl p-6 space-y-4 h-full">
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-foreground mb-2">Become a Worker</h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            Register as a worker to process tasks and earn rewards. Your stake determines your capacity and commitment to the network.
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3 pt-4 border-t border-white/10">
+                        <div className="flex items-start space-x-3">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Earn Rewards</p>
+                            <p className="text-xs text-muted-foreground">Get paid for completing tasks</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Flexible Capacity</p>
+                            <p className="text-xs text-muted-foreground">Choose your work capacity based on stake</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Withdrawable Stake</p>
+                            <p className="text-xs text-muted-foreground">Unstake anytime with a cooldown period</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  </motion.div>
 
-                    <div className="space-y-4">
-                      {/* Queue Selection Dropdown */}
-                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Queue</span>
-                          <span className="text-xs text-muted-foreground">Select work queue</span>
-                        </div>
-                        <select
-                          value={selectedQueueName}
-                          onChange={(e) => setSelectedQueueName(e.target.value)}
-                          className="w-full text-sm font-medium text-foreground bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-200"
-                        >
-                          <option value="" disabled>Select a queue...</option>
-                          {queues.map((queueName) => (
-                            <option key={queueName} value={queueName}>
-                              {queueName}
-                            </option>
-                          ))}
-                        </select>
+                  {/* Registration Form */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="lg:col-span-3"
+                  >
+                    <div className="bg-card border rounded-xl p-6 space-y-4">
+                      <div className="pb-3 border-b border-white/10">
+                        <h3 className="text-lg font-bold">Register Worker</h3>
+                        <p className="text-xs text-muted-foreground mt-1">Complete the form below to register as a worker</p>
                       </div>
 
-                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Amount</span>
-                          <div className="flex items-center gap-2">
-                            {psdnL2Balance && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatBalance(psdnL2Balance)} available PSDN
-                              </span>
-                            )}
+                      <div className="space-y-4">
+                        {/* Queue Selection Dropdown */}
+                        <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Queue</span>
+                            <span className="text-xs text-muted-foreground">Select work queue</span>
                           </div>
+                          <select
+                            value={selectedQueueName}
+                            onChange={(e) => setSelectedQueueName(e.target.value)}
+                            className="w-full text-sm font-medium text-foreground bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-200"
+                          >
+                            <option value="" disabled>Select a queue...</option>
+                            {queues.map((queueName) => (
+                              <option key={queueName} value={queueName}>
+                                {queueName}
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={stakeAmount}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            // Allow empty string, numbers, and one decimal point
-                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                              setStakeAmount(value);
-                            }
-                          }}
-                          placeholder="0.00"
-                          className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
-                        />
-                        <div className="flex items-center justify-between">
-                          {minimumStake && (
-                            <p className="text-xs text-gray-500">
-                              Minimum required: {formatUnits(minimumStake, 18)} PSDN
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2">
+
+                        <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Amount</span>
+                            <div className="flex items-center gap-2">
+                              {psdnL2Balance && (
+                                <span className="text-xs text-muted-foreground">
+                                  {formatBalance(psdnL2Balance)} available
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">PSDN</span>
+                            </div>
+                          </div>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={stakeAmount}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty string, numbers, and one decimal point
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setStakeAmount(value);
+                              }
+                            }}
+                            placeholder="0.00"
+                            className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                          />
+                          <div className="flex items-center justify-between">
                             {minimumStake && (
-                              <button
-                                onClick={handleMinStakeClick}
-                                className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
-                              >
-                                MIN
-                              </button>
+                              <p className="text-xs text-gray-500">
+                                Minimum: {formatUnits(minimumStake, 18)} PSDN
+                              </p>
                             )}
-                            {psdnL2Balance && (
-                              <button
-                                onClick={handleMaxStakeClick}
-                                className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
-                              >
-                                MAX
-                              </button>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {minimumStake && (
+                                <button
+                                  onClick={handleMinStakeClick}
+                                  className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                                >
+                                  MIN
+                                </button>
+                              )}
+                              {psdnL2Balance && (
+                                <button
+                                  onClick={handleMaxStakeClick}
+                                  className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                                >
+                                  MAX
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Capacity Selection */}
-                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Worker Capacity</span>
-                          <span className="text-xs text-muted-foreground">
-                            {stakeAmount && !isNaN(parseFloat(stakeAmount)) ? (
-                              `Max: ${Math.floor(parseFloat(stakeAmount) / 100)}`
-                            ) : (
-                              'Enter stake first'
-                            )}
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={workerCapacity}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            // Allow empty string and non-negative integers
-                            if (value === '' || /^\d+$/.test(value)) {
-                              // Validate against max capacity
-                              if (stakeAmount && value !== '') {
-                                const maxCapacity = Math.floor(parseFloat(stakeAmount) / 100);
-                                const numValue = parseInt(value);
-                                if (numValue <= maxCapacity && numValue >= 0) {
+                        {/* Capacity Selection */}
+                        <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Worker Capacity</span>
+                            <span className="text-xs text-muted-foreground">
+                              {stakeAmount && !isNaN(parseFloat(stakeAmount)) ? (
+                                `Max: ${Math.floor(parseFloat(stakeAmount) / 100)}`
+                              ) : (
+                                'Enter stake first'
+                              )}
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={workerCapacity}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty string and non-negative integers
+                              if (value === '' || /^\d+$/.test(value)) {
+                                // Validate against max capacity
+                                if (stakeAmount && value !== '') {
+                                  const maxCapacity = Math.floor(parseFloat(stakeAmount) / 100);
+                                  const numValue = parseInt(value);
+                                  if (numValue <= maxCapacity && numValue >= 0) {
+                                    setWorkerCapacity(value);
+                                  } else if (numValue > maxCapacity) {
+                                    // Cap at max capacity
+                                    setWorkerCapacity(maxCapacity.toString());
+                                  }
+                                } else {
                                   setWorkerCapacity(value);
-                                } else if (numValue > maxCapacity) {
-                                  // Cap at max capacity
-                                  setWorkerCapacity(maxCapacity.toString());
                                 }
-                              } else {
-                                setWorkerCapacity(value);
                               }
-                            }
-                          }}
-                          placeholder="0"
-                          disabled={!stakeAmount || isNaN(parseFloat(stakeAmount))}
-                          className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        <p className="text-xs text-gray-500">
-                          Requires: {workerCapacity ? parseInt(workerCapacity) * 100 : 0} PSDN minimum
-                        </p>
+                            }}
+                            placeholder="0"
+                            disabled={!stakeAmount || isNaN(parseFloat(stakeAmount))}
+                            className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                          <p className="text-xs text-gray-500">
+                            Requires: {workerCapacity ? parseInt(workerCapacity) * 100 : 0} PSDN minimum
+                          </p>
+                        </div>
+
+                        {/* Network Check, Approval, and Register Button */}
+                        {!address ? (
+                          <button
+                            onClick={() => openConnectModal?.()}
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Connect Wallet
+                          </button>
+                        ) : !isOnL2 ? (
+                          <button
+                            onClick={handleSwitchToL2}
+                            disabled={isSwitchingChain}
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                          </button>
+                        ) : (
+                          <>
+                            {/* Check if approval is needed */}
+                            {stakeAmount && workerCapacity && workerCapacity !== "0" && selectedQueueName && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
+                              <button
+                                onClick={handleApproveStake}
+                                disabled={isApproveStakePending || (!!approveStakeTxHash && !isApproveStakeSuccess)}
+                                className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {(isApproveStakePending || (approveStakeTxHash && !isApproveStakeSuccess)) ? "Approving..." : "Approve Tokens"}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={handleRegisterWorker}
+                                disabled={
+                                  isRegisterWorkerPending || 
+                                  isRegisterWorkerConfirming || 
+                                  stakeAmount === "" || 
+                                  workerCapacity === "" || 
+                                  workerCapacity === "0" ||
+                                  selectedQueueName === "" ||
+                                  (!!workerCapacity && !!stakeAmount && parseInt(workerCapacity) * 100 > parseFloat(stakeAmount))
+                                }
+                                className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {(isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Status Messages */}
+                        {approveStakeError && formatTransactionError(approveStakeError) && (
+                          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                            <p className="text-destructive text-xs font-medium">
+                              {formatTransactionError(approveStakeError)}
+                            </p>
+                          </div>
+                        )}
+
+                        {registerWorkerError && formatTransactionError(registerWorkerError) && (
+                          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                            <p className="text-destructive text-xs font-medium">
+                              {formatTransactionError(registerWorkerError)}
+                            </p>
+                          </div>
+                        )}
+
                       </div>
-
-                      {/* Network Check, Approval, and Register Button */}
-                      {!address ? (
-                        <button
-                          onClick={() => openConnectModal?.()}
-                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Connect Wallet
-                        </button>
-                      ) : !isOnL2 ? (
-                        <button
-                          onClick={handleSwitchToL2}
-                          disabled={isSwitchingChain}
-                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isSwitchingChain ? "Switching..." : "Switch to L2"}
-                        </button>
-                      ) : (
-                        <>
-                          {/* Check if approval is needed */}
-                          {stakeAmount && workerCapacity && workerCapacity !== "0" && selectedQueueName && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
-                            <button
-                              onClick={handleApproveStake}
-                              disabled={isApproveStakePending || (!!approveStakeTxHash && !isApproveStakeSuccess)}
-                              className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {(isApproveStakePending || (approveStakeTxHash && !isApproveStakeSuccess)) ? "Approving..." : "Approve Tokens"}
-                            </button>
-                          ) : (
-                            <button
-                              onClick={handleRegisterWorker}
-                              disabled={
-                                isRegisterWorkerPending || 
-                                isRegisterWorkerConfirming || 
-                                stakeAmount === "" || 
-                                workerCapacity === "" || 
-                                workerCapacity === "0" ||
-                                selectedQueueName === "" ||
-                                (!!workerCapacity && !!stakeAmount && parseInt(workerCapacity) * 100 > parseFloat(stakeAmount))
-                              }
-                              className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {(isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      {/* Status Messages */}
-                      {approveStakeError && formatTransactionError(approveStakeError) && (
-                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                          <p className="text-destructive text-xs font-medium">
-                            {formatTransactionError(approveStakeError)}
-                          </p>
-                        </div>
-                      )}
-
-                      {registerWorkerError && formatTransactionError(registerWorkerError) && (
-                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                          <p className="text-destructive text-xs font-medium">
-                            {formatTransactionError(registerWorkerError)}
-                          </p>
-                        </div>
-                      )}
-
                     </div>
                   </motion.div>
                 </div>
