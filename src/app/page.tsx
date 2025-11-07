@@ -425,7 +425,7 @@ export default function Home() {
   useEffect(() => {
     const fetchQueues = async () => {
       try {
-        const response = await fetch('https://subnet-mgmt-console-api.psdn.ai/api/v1/queues');
+        const response = await fetch('/api/queues');
         const data = await response.json() as { items?: Array<{ queueName: string }> };
         if (data.items && Array.isArray(data.items)) {
           const queueNames = data.items.map((item) => item.queueName);
