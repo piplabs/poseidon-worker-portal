@@ -21,6 +21,15 @@ export type TransactionStatus =
   | 'completed'                  // Withdrawal complete
   | 'error';                     // Error occurred
 
+export type TransactionType = 
+  | 'L1_TO_L2'                   // Bridge L1 to L2
+  | 'L2_TO_L1'                   // Bridge L2 to L1
+  | 'MINT'                       // Mint tokens (faucet)
+  | 'STAKE_REGISTER'             // Register as worker
+  | 'STAKE_UNSTAKE_REQUEST'      // Request unstake
+  | 'STAKE_WITHDRAW'             // Withdraw stake
+  | 'STAKE_CLAIM_REWARDS';       // Claim rewards
+
 export interface WithdrawalTransaction {
   // Identification
   id: string;                       // Unique transaction ID (tx hash)
@@ -36,9 +45,9 @@ export interface WithdrawalTransaction {
   errorMessage?: string;
   
   // Transaction details
-  type: 'L1_TO_L2' | 'L2_TO_L1';  // Bridge direction
+  type: TransactionType;           // Transaction type
   token: string;                   // Token symbol (ETH or PSDN)
-  amount: string;                  // Amount being bridged
+  amount: string;                  // Amount being bridged/minted/staked
   fromAddress: string;             // User's address
   
   // Withdrawal data (needed for proof and finalization)

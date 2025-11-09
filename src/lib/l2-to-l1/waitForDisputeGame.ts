@@ -82,7 +82,7 @@ export async function waitForDisputeGame(l2BlockNumber: number): Promise<Dispute
         }
 
         await new Promise((resolve) => setTimeout(resolve, checkInterval));
-      } catch (error) {
+      } catch {
         await new Promise((resolve) => setTimeout(resolve, checkInterval));
       }
     }

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Circle, CheckCircle2 } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { type WithdrawalTransaction, TransactionStorage } from "@/lib/transaction-tracker";
+import { type WithdrawalTransaction } from "@/lib/transaction-tracker";
 import { useAccount } from "wagmi";
 
 interface WithdrawalStepsModalProps {
@@ -72,7 +72,7 @@ export function WithdrawalStepsModal({
       // Reset countdown if we're not in game_resolved state
       setFinalizeCountdown(null);
     }
-  }, [transaction.status, transaction.gameResolvedAt]); // Added gameResolvedAt to deps
+  }, [transaction.status, transaction.gameResolvedAt, finalizeCountdown]);
 
   // Separate effect for finalization timer
   useEffect(() => {
@@ -610,7 +610,7 @@ export function WithdrawalStepsModal({
               {activeTab === 'steps' ? (
                 <>
                 <div className="space-y-1.5">
-                  {steps.map((step, index) => (
+                  {steps.map((step) => (
                     <div key={step.id}>
                       <div
                         className={`flex items-center justify-between p-3 rounded-xl transition-all duration-300 ${

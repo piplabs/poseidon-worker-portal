@@ -1,5 +1,4 @@
-import { createPublicClient, http } from "viem";
-import { CONTRACT_ADDRESSES, RPC_URLS } from "@/lib/constants";
+import { CONTRACT_ADDRESSES } from "@/lib/constants";
 import { MessagePassedEventData } from "./types";
 import { isUserRejectedError, logTransactionError } from "@/lib/error-utils";
 
@@ -19,9 +18,7 @@ export interface FinalizeWithdrawalParams {
 
 export async function finalizeWithdrawal({
   withdrawalDetails,
-  address,
   writeProofContract,
-  setIsWithdrawalComplete,
   isWithdrawalComplete = false,
   updateTransactionStatus,
 }: FinalizeWithdrawalParams): Promise<boolean> {
@@ -33,22 +30,6 @@ export async function finalizeWithdrawal({
   try {
     // Note: Challenge period countdown is now handled by the UI
     // The user already waited 10 seconds before clicking the "Get" button
-
-    // Create L1 client for reading balances
-    const l1Client = createPublicClient({
-      transport: http(RPC_URLS.L1),
-    });
-
-    // ERC20 ABI for balance checking
-    const erc20Abi = [
-      {
-        type: 'function',
-        name: 'balanceOf',
-        inputs: [{ name: 'account', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view'
-      }
-    ] as const;
 
     // OptimismPortal ABI for finalization
     const optimismPortalAbi = [
@@ -75,14 +56,6 @@ export async function finalizeWithdrawal({
     ] as const;
 
     const wd = withdrawalDetails;
-
-    // Check L1 token balance before
-    const balanceBefore = await l1Client.readContract({
-      address: CONTRACT_ADDRESSES.PSDN_L1 as `0x${string}`,
-      abi: erc20Abi,
-      functionName: 'balanceOf',
-      args: [address as `0x${string}`],
-    });
 
     // Build withdrawal tuple
     const withdrawalTuple = {
