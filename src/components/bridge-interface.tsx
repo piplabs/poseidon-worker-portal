@@ -81,11 +81,13 @@ export function BridgeInterface() {
   const [monitoredResolveGameTxHash, setMonitoredResolveGameTxHash] = useState<string | null>(null);
   const [monitoredFinalizeTxHash, setMonitoredFinalizeTxHash] = useState<string | null>(null);
   const [showL1ToL2Success, setShowL1ToL2Success] = useState(false);
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
   
   const processingTxs = useRef<Set<string>>(new Set());
   const shouldContinueAfterApproval = useRef(false);
   const lastProcessedApprovalHash = useRef<string | null>(null);
   const isRequestingApproval = useRef(false);
+  const lastApprovalTimestamp = useRef<number>(0);
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -1138,44 +1140,52 @@ export function BridgeInterface() {
       
       // Mark this approval as processed
       lastProcessedApprovalHash.current = approveTxHash;
+      lastApprovalTimestamp.current = Date.now();
+      setIsProcessingApproval(true);
       
       // Refetch allowances and wait for them to update with proper polling
       const refetchAndContinue = async () => {
         // Wait a bit for blockchain state to propagate
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Poll the allowance until it updates (up to 10 seconds)
-        const maxAttempts = 10;
+        // Poll the allowance until it updates (up to 15 seconds)
+        const maxAttempts = 15;
         let attempts = 0;
+        let allowanceUpdated = false;
         
-        while (attempts < maxAttempts) {
-          await Promise.all([
+        while (attempts < maxAttempts && !allowanceUpdated) {
+          const [l1Result, l2Result] = await Promise.all([
             refetchAllowance(),
             refetchL2Allowance(),
           ]);
+          
+          // Check if allowance has increased (approval successful)
+          // If either allowance is now MAX_UINT256 or greater than 0, consider it updated
+          if ((l1Result.data && l1Result.data > BigInt(0)) || 
+              (l2Result.data && l2Result.data > BigInt(0))) {
+            allowanceUpdated = true;
+            break;
+          }
           
           // Wait another second for the state to update
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           attempts++;
-          
-          // Check if we've successfully updated (this will be checked in the next handleTransact call)
-          // For now, just wait the full polling period to ensure the allowance is updated
-          if (attempts >= 3) {
-            // After 3 attempts (5 seconds total), assume it's ready
-            break;
-          }
         }
         
         // Reset flags
         shouldContinueAfterApproval.current = false;
         isRequestingApproval.current = false;
+        setIsProcessingApproval(false);
         
-        // Additional delay to ensure state is fully updated, then re-trigger the transaction
-        setTimeout(() => {
-          // Call handleTransact which will be available in scope
-          handleTransact();
-        }, 1000);
+        // Only proceed if allowance was updated or we've waited long enough
+        if (allowanceUpdated || attempts >= maxAttempts) {
+          // Additional delay to ensure state is fully updated, then re-trigger the transaction
+          setTimeout(() => {
+            // Call handleTransact which will be available in scope
+            handleTransact();
+          }, 500);
+        }
       };
       
       refetchAndContinue();
@@ -1188,6 +1198,7 @@ export function BridgeInterface() {
     if (approveError && isRequestingApproval.current) {
       isRequestingApproval.current = false;
       shouldContinueAfterApproval.current = false;
+      setIsProcessingApproval(false);
     }
   }, [approveError]);
 
@@ -1828,6 +1839,13 @@ export function BridgeInterface() {
           const needsL2Approval = !l2Allowance || l2Allowance < amount;
           
           if (needsL2Approval) {
+            // Guard: Prevent requesting approval if one was just processed (within last 10 seconds)
+            const timeSinceLastApproval = Date.now() - lastApprovalTimestamp.current;
+            if (timeSinceLastApproval < 10000) {
+              console.log('Approval was just processed, waiting for allowance to update...');
+              return;
+            }
+            
             // Set flags to auto-continue after approval and prevent duplicate requests
             shouldContinueAfterApproval.current = true;
             isRequestingApproval.current = true;
@@ -1866,6 +1884,13 @@ export function BridgeInterface() {
           const needsApproval = !currentAllowance || currentAllowance < amount;
           
           if (needsApproval) {
+            // Guard: Prevent requesting approval if one was just processed (within last 10 seconds)
+            const timeSinceLastApproval = Date.now() - lastApprovalTimestamp.current;
+            if (timeSinceLastApproval < 10000) {
+              console.log('Approval was just processed, waiting for allowance to update...');
+              return;
+            }
+            
             // Set flags to auto-continue after approval and prevent duplicate requests
             shouldContinueAfterApproval.current = true;
             isRequestingApproval.current = true;
@@ -1938,13 +1963,19 @@ export function BridgeInterface() {
     if (fromToken.symbol !== 'PSDN' || isL2ToL1 || !fromAmount || !isValidAmount(fromAmount)) {
       return false;
     }
+    
+    // If we're currently processing an approval, don't show approval needed
+    if (isProcessingApproval) {
+      return false;
+    }
+    
     try {
       const amount = parseUnits(fromAmount, TOKEN_DECIMALS);
       return !currentAllowance || currentAllowance < amount;
     } catch {
       return false;
     }
-  }, [fromToken.symbol, isL2ToL1, fromAmount, currentAllowance]);
+  }, [fromToken.symbol, isL2ToL1, fromAmount, currentAllowance, isProcessingApproval]);
 
   // Get active withdrawal transaction for modal
   // We need to refresh this whenever transactions change
