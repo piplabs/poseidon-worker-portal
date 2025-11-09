@@ -91,7 +91,8 @@ export function BridgeInterface() {
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
   
-  const addNotification = useCallback(() => {
+  const addNotification = useCallback((_type: string, _message: string) => {
+    // Placeholder for future notification implementation
   }, []);
   
   const [proofSubmissionData, setProofSubmissionData] = useState<{
