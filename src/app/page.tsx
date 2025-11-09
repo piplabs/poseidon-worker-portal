@@ -33,6 +33,7 @@ export default function Home() {
   const [rewardEpochId, setRewardEpochId] = useState("");
   const [selectedQueueName, setSelectedQueueName] = useState("");
   const [queues, setQueues] = useState<string[]>([]);
+  const [showMintSuccess, setShowMintSuccess] = useState(false);
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -41,7 +42,12 @@ export default function Home() {
   
   const isOnL2 = chainId === CHAIN_IDS.L2;
   
-  const { writeContract, isPending, error } = useWriteMintPsdnMint();
+  const { writeContract, isPending, error, data: mintTxHash } = useWriteMintPsdnMint();
+  
+  const { isSuccess: isMintConfirmed, isLoading: isMintConfirming } = useWaitForTransactionReceipt({
+    hash: mintTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L1,
+  });
   
   const { data: poseidonToken } = useReadSubnetControlPlanePoseidonToken({
     query: { 
@@ -109,6 +115,16 @@ export default function Home() {
       }
     }
   }, [isApproveStakeSuccess, refetchStakeAllowance]);
+  
+  // Show success animation when mint is confirmed
+  useEffect(() => {
+    if (isMintConfirmed && mintTxHash) {
+      setShowMintSuccess(true);
+      setTimeout(() => {
+        setShowMintSuccess(false);
+      }, 3000);
+    }
+  }, [isMintConfirmed, mintTxHash]);
   
   const { 
     writeContract: writeRegisterWorker, 
@@ -1317,13 +1333,65 @@ export default function Home() {
                 >
                   {isSwitchingChain ? "Switching..." : "Switch to Poseidon Devnet (L1)"}
                 </button>
+              ) : showMintSuccess ? (
+                <motion.button
+                  disabled
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold rounded-lg overflow-hidden relative border border-blue-300/30"
+                  initial={{ scale: 1 }}
+                  animate={{ 
+                    scale: [1, 1.02, 1],
+                  }}
+                  transition={{
+                    duration: 3,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <motion.div
+                    className="absolute inset-0"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.15), rgba(59, 130, 246, 0.1))',
+                      backgroundSize: '300% 100%',
+                    }}
+                    initial={{ backgroundPosition: '0% 0%' }}
+                    animate={{ 
+                      backgroundPosition: ['0% 0%', '100% 0%', '200% 0%', '0% 0%']
+                    }}
+                    transition={{
+                      duration: 3,
+                      ease: "easeInOut",
+                    }}
+                  />
+                  <motion.div
+                    className="absolute inset-0 opacity-50"
+                    style={{
+                      background: 'radial-gradient(circle at center, rgba(139, 92, 246, 0.3), transparent)',
+                    }}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ 
+                      scale: [0.8, 1.2, 0.8],
+                      opacity: [0, 0.5, 0],
+                    }}
+                    transition={{
+                      duration: 3,
+                      ease: "easeInOut",
+                    }}
+                  />
+                  <motion.span 
+                    className="relative z-10 text-gray-200 font-semibold"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    Confirmed
+                  </motion.span>
+                </motion.button>
               ) : (
                 <button
                   onClick={handleMint}
-                  disabled={isPending || !mintAmount}
+                  disabled={isPending || isMintConfirming || !mintAmount}
                   className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isPending ? "Minting..." : "Mint"}
+                  {isPending || isMintConfirming ? "Confirming..." : "Mint"}
                 </button>
               )}
 

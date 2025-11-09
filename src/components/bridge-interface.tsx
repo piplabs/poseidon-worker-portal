@@ -113,9 +113,9 @@ export function BridgeInterface() {
   const [isResolvingGame, setIsResolvingGame] = useState(false);
   const [isWithdrawalComplete, setIsWithdrawalComplete] = useState(false);
   const { writeContract: writeProofContract, data: proofTxHash, error: proofError } = useWriteContract();
-  const { writeContract: writeResolveClaimsContract, data: resolveClaimsTxHash } = useWriteContract();
-  const { writeContract: writeResolveGameContract, data: resolveGameTxHash } = useWriteContract();
-  const { writeContract: writeFinalizeContract, data: finalizeTxHash } = useWriteContract();
+  const { writeContract: writeResolveClaimsContract, data: resolveClaimsTxHash, error: resolveClaimsErrorFromHook } = useWriteContract();
+  const { writeContract: writeResolveGameContract, data: resolveGameTxHash, error: resolveGameErrorFromHook } = useWriteContract();
+  const { writeContract: writeFinalizeContract, data: finalizeTxHash, error: finalizeErrorFromHook } = useWriteContract();
   const switchChainAsync = useCallback(async (params: { chainId: number }) => {
     return new Promise<void>((resolve, reject) => {
       switchChain(params, {
@@ -141,17 +141,22 @@ export function BridgeInterface() {
     hash: (monitoredProofTxHash || proofTxHash) as `0x${string}` | undefined,
   });
 
-  const { isSuccess: isResolveClaimsConfirmed, error: resolveClaimsError } = useWaitForTransactionReceipt({
+  const { isSuccess: isResolveClaimsConfirmed, error: resolveClaimsTxReceiptError } = useWaitForTransactionReceipt({
     hash: (monitoredResolveClaimsTxHash || resolveClaimsTxHash) as `0x${string}` | undefined,
   });
 
-  const { isSuccess: isResolveGameConfirmed, error: resolveGameError } = useWaitForTransactionReceipt({
+  const { isSuccess: isResolveGameConfirmed, error: resolveGameTxReceiptError } = useWaitForTransactionReceipt({
     hash: (monitoredResolveGameTxHash || resolveGameTxHash) as `0x${string}` | undefined,
   });
 
-  const { isSuccess: isFinalizeConfirmed, error: finalizeError } = useWaitForTransactionReceipt({
+  const { isSuccess: isFinalizeConfirmed, error: finalizeTxReceiptError } = useWaitForTransactionReceipt({
     hash: (monitoredFinalizeTxHash || finalizeTxHash) as `0x${string}` | undefined,
   });
+  
+  // Monitor errors from write contract hooks (these catch user rejections)
+  const resolveClaimsError = resolveClaimsErrorFromHook || resolveClaimsTxReceiptError;
+  const resolveGameError = resolveGameErrorFromHook || resolveGameTxReceiptError;
+  const finalizeError = finalizeErrorFromHook || finalizeTxReceiptError;
 
   const finalizeWithdrawal = useCallback(async (withdrawalDetails: MessagePassedEventData, txId?: string) => {
     if (!address) return false;
@@ -216,6 +221,13 @@ export function BridgeInterface() {
       TransactionStorage.update({ id: tx.id, status: 'claims_resolved' });
     }
     if (resolveClaimsError) {
+      console.log('[Resolve Claims Error]', {
+        error: resolveClaimsError,
+        isUserRejected: isUserRejectedError(resolveClaimsError),
+        hasProofSubmissionData: !!proofSubmissionData,
+        withdrawalHash: proofSubmissionData?.withdrawalDetails.withdrawalHash
+      });
+      
       if (!isUserRejectedError(resolveClaimsError)) {
         logTransactionError('Resolve Claims Transaction Failed', resolveClaimsError);
 
@@ -224,6 +236,7 @@ export function BridgeInterface() {
           const tx = TransactionStorage.getAll().find(t =>
             t.withdrawalDetails?.withdrawalHash === txId
           );
+          console.log('[Resolve Claims Error - Non-rejection] Found tx:', tx?.id, 'Current status:', tx?.status);
           if (tx) {
             TransactionStorage.update({ 
               id: tx.id, 
@@ -232,20 +245,28 @@ export function BridgeInterface() {
             });
             // Clear the processing flag so user can retry
             processingTxs.current.delete(`resolve_${tx.id}`);
+            console.log('[Resolve Claims Error - Non-rejection] Reset status to proof_confirmed for tx:', tx.id);
           }
         }
       } else {
         // User cancelled - reset status back to proof_confirmed so they can retry
+        console.log('[Resolve Claims Error - User rejected] Attempting to reset status');
         if (proofSubmissionData?.withdrawalDetails.withdrawalHash) {
           const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
           const tx = TransactionStorage.getAll().find(t =>
             t.withdrawalDetails?.withdrawalHash === txId
           );
+          console.log('[Resolve Claims Error - User rejected] Found tx:', tx?.id, 'Current status:', tx?.status);
           if (tx) {
             TransactionStorage.update({ id: tx.id, status: 'proof_confirmed', errorMessage: undefined });
             // Also clear the processing flag
             processingTxs.current.delete(`resolve_${tx.id}`);
+            console.log('[Resolve Claims Error - User rejected] Reset status to proof_confirmed for tx:', tx.id);
+          } else {
+            console.log('[Resolve Claims Error - User rejected] Transaction not found!');
           }
+        } else {
+          console.log('[Resolve Claims Error - User rejected] No proofSubmissionData available!');
         }
       }
     }
@@ -1519,7 +1540,7 @@ export function BridgeInterface() {
           TransactionStorage.markError(tx.id, `Proof submission failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } else {
           // User cancelled - reset status back to proof_generated so they can retry
-          TransactionStorage.update({ id: tx.id, status: 'proof_generated' });
+          TransactionStorage.update({ id: tx.id, status: 'proof_generated', errorMessage: undefined });
         }
         // Clear proof submission data on error
         setProofSubmissionData(null);
@@ -1527,7 +1548,7 @@ export function BridgeInterface() {
       .finally(() => {
         processingTxs.current.delete(`prove_${tx.id}`);
       });
-  }, [activeWithdrawalTxId, submitProof, address, openConnectModal]);
+  }, [activeWithdrawalTxId, submitProof, address, openConnectModal, ipBalance]);
   
   const handleResolveGame = useCallback(async () => {
     if (!address) {
@@ -1538,7 +1559,7 @@ export function BridgeInterface() {
     if (!activeWithdrawalTxId) return;
     
     const tx = TransactionStorage.getById(activeWithdrawalTxId);
-    if (!tx || !tx.disputeGame) {
+    if (!tx || !tx.disputeGame || !tx.withdrawalDetails || !tx.proofData) {
       return;
     }
     
@@ -1564,6 +1585,13 @@ export function BridgeInterface() {
     
     processingTxs.current.add(`resolve_${tx.id}`);
     
+    // Set proof submission data so the error handler can find the transaction
+    setProofSubmissionData({
+      withdrawalDetails: tx.withdrawalDetails,
+      disputeGame: tx.disputeGame,
+      proofData: tx.proofData
+    });
+    
     // Update status to waiting for signature BEFORE calling resolveGame and clear any previous error
     TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_signature', errorMessage: undefined });
     
@@ -1575,14 +1603,14 @@ export function BridgeInterface() {
           TransactionStorage.markError(tx.id, `Resolve claims failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } else {
           // User cancelled - reset status back to proof_confirmed so they can retry
-          TransactionStorage.update({ id: tx.id, status: 'proof_confirmed' });
+          TransactionStorage.update({ id: tx.id, status: 'proof_confirmed', errorMessage: undefined });
         }
         // Always clear the processing flag on error
         processingTxs.current.delete(`resolve_${tx.id}`);
       });
-  }, [activeWithdrawalTxId, resolveGame, address, openConnectModal]);
+  }, [activeWithdrawalTxId, resolveGame, address, openConnectModal, ipBalance]);
   
-  const handleResolveGameFinal = useCallback(() => {
+  const handleResolveGameFinal = useCallback(async () => {
     if (!address) {
       openConnectModal?.();
       return;
@@ -1620,27 +1648,38 @@ export function BridgeInterface() {
     // Update status to waiting for signature BEFORE calling writeResolveGameContract and clear any previous error
     TransactionStorage.update({ id: tx.id, status: 'waiting_resolve_game_signature', errorMessage: undefined });
     
-    // Get the dispute game address from proof submission data
-    const gameAddress = proofSubmissionData.disputeGame.gameAddress;
-    
-    // Send the resolve game transaction directly
-    writeResolveGameContract({
-      address: gameAddress as `0x${string}`,
-      abi: [{
-        type: 'function',
-        name: 'resolve',
-        inputs: [],
-        outputs: [],
-        stateMutability: 'nonpayable'
-      }],
-      functionName: 'resolve',
-    });
-    
-    // Clean up processing flag after a delay
-    setTimeout(() => {
+    try {
+      // Get the dispute game address from proof submission data
+      const gameAddress = proofSubmissionData.disputeGame.gameAddress;
+      
+      // Send the resolve game transaction directly
+      await writeResolveGameContract({
+        address: gameAddress as `0x${string}`,
+        abi: [{
+          type: 'function',
+          name: 'resolve',
+          inputs: [],
+          outputs: [],
+          stateMutability: 'nonpayable'
+        }],
+        functionName: 'resolve',
+      });
+    } catch (error) {
+      if (!isUserRejectedError(error)) {
+        logTransactionError('Resolve game failed', error);
+        TransactionStorage.update({ 
+          id: tx.id, 
+          status: 'claims_resolved',
+          errorMessage: 'Insufficient gas on L1.'
+        });
+      } else {
+        // User cancelled - reset status back to claims_resolved so they can retry
+        TransactionStorage.update({ id: tx.id, status: 'claims_resolved', errorMessage: undefined });
+      }
+      // Always clear the processing flag on error
       processingTxs.current.delete(`resolve_game_final_${tx.id}`);
-    }, 1000);
-  }, [activeWithdrawalTxId, proofSubmissionData, writeResolveGameContract, address, openConnectModal]);
+    }
+  }, [activeWithdrawalTxId, proofSubmissionData, writeResolveGameContract, address, openConnectModal, ipBalance]);
   
   const handleCloseWithdrawalModal = useCallback(() => {
     // Clean up temporary transaction if it exists
@@ -1705,13 +1744,12 @@ export function BridgeInterface() {
           TransactionStorage.markError(tx.id, `Finalization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } else {
           // User cancelled - reset status back to game_resolved so they can retry
-          TransactionStorage.update({ id: tx.id, status: 'game_resolved' });
+          TransactionStorage.update({ id: tx.id, status: 'game_resolved', errorMessage: undefined });
         }
-      })
-      .finally(() => {
+        // Always clear the processing flag on error
         processingTxs.current.delete(`finalize_${tx.id}`);
       });
-  }, [activeWithdrawalTxId, finalizeWithdrawal, address, openConnectModal]);
+  }, [activeWithdrawalTxId, finalizeWithdrawal, address, openConnectModal, ipBalance]);
 
   const handleTransact = useCallback(async () => {
     if (!address) {
@@ -2198,12 +2236,13 @@ export function BridgeInterface() {
         ) : (
         <button
           onClick={handleTransact}
-          disabled={!fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || isApprovePending || isApproveConfirming}
+          disabled={!fromAmount || parseFloat(fromAmount) <= 0 || isTransactionPending || isApprovePending || isApproveConfirming || (bridgeEthTxData && !isBridgeEthConfirmed) || (depositErc20TxData && !isDepositErc20Confirmed)}
           className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isApprovePending ? "Approving..." : 
            isApproveConfirming ? "Confirming Approval..." : 
-           isTransactionPending ? "Processing..." : (
+           (isBridgeEthPending || isDepositErc20Pending || isL2BridgeErc20Pending || isL2BridgeEthPending || 
+            (bridgeEthTxData && !isBridgeEthConfirmed) || (depositErc20TxData && !isDepositErc20Confirmed)) ? "Bridging..." : (
             needsApproval ? "Approve PSDN" : "Bridge"
           )}
         </button>
