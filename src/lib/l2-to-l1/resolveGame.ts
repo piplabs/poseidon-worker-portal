@@ -86,7 +86,6 @@ export async function resolveGame({
   isResolvingGame,
   isWithdrawalComplete,
   setIsResolvingGame,
-  updateTransactionStatus,
 }: ResolveGameParams): Promise<boolean> {
   // Prevent multiple simultaneous executions
   if (isResolvingGame) {

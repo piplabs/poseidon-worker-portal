@@ -89,16 +89,7 @@ export async function submitProof({
       data: wd.data as `0x${string}`
     };
     
-    // Build output root proof tuple
-    const initialOutputRootProofTuple = {
-      version: proofData.outputRootProof.version as `0x${string}`,
-      stateRoot: proofData.outputRootProof.stateRoot as `0x${string}`,
-      messagePasserStorageRoot: proofData.outputRootProof.messagePasserStorageRoot as `0x${string}`,
-      latestBlockhash: proofData.outputRootProof.latestBlockhash as `0x${string}`
-    };
-    
-    // Build withdrawal proof array
-    const initialWithdrawalProofArray = proofData.withdrawalProof.map((p: string) => p as `0x${string}`);
+    // Note: Output root proof and withdrawal proof arrays are built inline below
     
     addNotification('info', '🔄 Submitting proof to L1...');
     
@@ -110,7 +101,7 @@ export async function submitProof({
         addNotification('success', '✅ Switched to L1 network');
         // Wait a moment for the network switch to complete
         await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (switchError) {
+      } catch {
         addNotification('error', '❌ Failed to switch to L1 network');
         throw new Error('Please switch to Story Poseidon Devnet L1 to submit the proof');
       }

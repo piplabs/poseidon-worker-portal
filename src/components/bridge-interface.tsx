@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { TokenSelector } from "@/components/token-selector";
-import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
 import { WithdrawalStepsModal } from "@/components/withdrawal-steps-modal";
 import { ChevronDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ import {
   POLLING_INTERVAL,
   MAX_UINT256,
   MIN_GAS_LIMIT,
-  ZERO_AMOUNT,
   SWAP_ANIMATION_DURATION,
   EMPTY_EXTRA_DATA,
   type Token,
@@ -61,7 +59,6 @@ import {
 import {
   TransactionStorage,
   type TransactionStatus,
-  type WithdrawalTransaction,
 } from "@/lib/transaction-tracker";
 import { isUserRejectedError, formatTransactionError, logTransactionError } from "@/lib/error-utils";
 
@@ -94,7 +91,7 @@ export function BridgeInterface() {
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
   
-  const addNotification = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
+  const addNotification = useCallback(() => {
   }, []);
   
   const [proofSubmissionData, setProofSubmissionData] = useState<{
@@ -456,18 +453,15 @@ export function BridgeInterface() {
       // Update status to proof_submitted when transaction hash is available (user confirmed in wallet)
       // Try to find the transaction using either proofSubmissionData or activeWithdrawalTxId
       let tx = null;
-      let foundMethod = '';
 
       if (proofSubmissionData) {
         const txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
         tx = TransactionStorage.getAll().find(t => t.withdrawalDetails?.withdrawalHash === txId);
-        if (tx) foundMethod = 'proofSubmissionData';
       }
 
       if (!tx && activeWithdrawalTxId) {
         // Fallback to activeWithdrawalTxId if proofSubmissionData didn't find it
         tx = TransactionStorage.getById(activeWithdrawalTxId);
-        if (tx) foundMethod = 'activeWithdrawalTxId';
       }
 
       if (tx && tx.status === 'waiting_proof_signature') {
@@ -482,21 +476,18 @@ export function BridgeInterface() {
       // Try to find the transaction using either proofSubmissionData or activeWithdrawalTxId
       let tx = null;
       let txId: string | null = null;
-      let foundMethod = '';
 
       if (proofSubmissionData) {
         txId = proofSubmissionData.withdrawalDetails.withdrawalHash;
         tx = TransactionStorage.getAll().find(t =>
           t.withdrawalDetails?.withdrawalHash === txId
         );
-        if (tx) foundMethod = 'proofSubmissionData';
       }
 
       if (!tx && activeWithdrawalTxId) {
         // Fallback to activeWithdrawalTxId if proofSubmissionData didn't find it
         txId = activeWithdrawalTxId;
         tx = TransactionStorage.getById(activeWithdrawalTxId);
-        if (tx) foundMethod = 'activeWithdrawalTxId';
       }
 
       if (!txId || !tx) {
@@ -570,11 +561,11 @@ export function BridgeInterface() {
         }
       }
     }
-  }, [proofTxHash, isProofConfirmed, proofError, proofSubmissionData, resolveGame]);
+  }, [proofTxHash, isProofConfirmed, proofError, proofSubmissionData, resolveGame, activeWithdrawalTxId]);
 
 
   // Function to log receipt details and extract MessagePassed event using viem
-  const logReceiptDetails = useCallback(async (txHash: string) => {
+  const logReceiptDetails = useCallback(async (txHash: string): Promise<void> => {
     try {
       // Check if already processing to prevent duplicate processing
       const tx = TransactionStorage.getById(txHash);
@@ -702,7 +693,7 @@ export function BridgeInterface() {
         logTransactionError('Failed to get receipt details', error);
       }
     }
-  }, [waitForDisputeGame, generateProof, submitProof]);
+  }, []);
   
   // Computed values
   const isL2ToL1 = fromToken.layer === 'L2';
@@ -754,7 +745,7 @@ export function BridgeInterface() {
         setActiveWithdrawalTxId(null);
       }
     }
-  }, [l2BridgeErc20Error, l2BridgeEthError]);  // Removed activeWithdrawalTxId to prevent stale error from triggering cleanup on new transactions
+  }, [l2BridgeErc20Error, l2BridgeEthError, activeWithdrawalTxId]);
 
   // Wait for approval transaction confirmation
   const { isSuccess: isApproveSuccess, isLoading: isApproveConfirming } = useWaitForTransactionReceipt({
@@ -990,7 +981,7 @@ export function BridgeInterface() {
                   });
                 }
               })
-              .catch((error: Error) => {
+              .catch(() => {
                 // Silently handle errors
               });
           }
@@ -1014,8 +1005,8 @@ export function BridgeInterface() {
                   proofData,
                 });
               })
-              .catch((error: Error) => {
-                TransactionStorage.markError(tx.id, `Proof generation failed: ${error.message}`);
+              .catch((error) => {
+                TransactionStorage.markError(tx.id, `Proof generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
               });
           }
           break;
@@ -1125,7 +1116,6 @@ export function BridgeInterface() {
           break;
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]); // Only run when address changes (including on mount)
   // Note: We intentionally exclude generateProof, waitForDisputeGame, and setProofSubmissionData
   // from dependencies as they are stable and we only want this to run on mount/address change
@@ -1701,13 +1691,7 @@ export function BridgeInterface() {
     setActiveWithdrawalTxId(null);
   }, [activeWithdrawalTxId]);
 
-  // Handler for when a transaction is selected from the pending transactions modal
-  const handleSelectTransaction = useCallback((transaction: WithdrawalTransaction) => {
-    if (transaction.type === 'L2_TO_L1') {
-      setActiveWithdrawalTxId(transaction.id);
-      setIsWithdrawalModalOpen(true);
-    }
-  }, []);
+  // Note: handleSelectTransaction removed as we moved PendingTransactionsTab to page level
 
   const handleFinalizeWithdrawal = useCallback(() => {
     if (!address) {
@@ -1936,7 +1920,7 @@ export function BridgeInterface() {
         setActiveWithdrawalTxId(null);
       }
     }
-  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, l2Allowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance, toToken.symbol, activeWithdrawalTxId, isApprovePending, isApproveConfirming, openConnectModal, psdnL2Balance, addNotification]);
+  }, [address, fromAmount, fromToken.symbol, isL2ToL1, currentAllowance, l2Allowance, writeBridgeEth, writeL2BridgeEth, writeApprove, writeDepositErc20, writeL2BridgeErc20, refetchPsdnBalance, refetchPsdnL2Balance, refetchIpBalance, refetchIpL2Balance, refetchAllowance, refetchL2Allowance, activeWithdrawalTxId, isApprovePending, isApproveConfirming, openConnectModal, psdnBalance, psdnL2Balance, addNotification]);
 
   // Memoized values
   const availableTokens = useMemo(() => 
@@ -2013,14 +1997,15 @@ export function BridgeInterface() {
   
   const activeWithdrawalTx = useMemo(() => {
     if (!activeWithdrawalTxId) return null;
+    // refreshKey is intentionally included to force re-computation when transactions update
     return TransactionStorage.getById(activeWithdrawalTxId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWithdrawalTxId, refreshKey]);
 
   // Note: Modal now handles its own completion animation and closing
 
   return (
     <>
-      <PendingTransactionsTab onSelectTransaction={handleSelectTransaction} />
       {activeWithdrawalTx && (
         <WithdrawalStepsModal
           isOpen={isWithdrawalModalOpen}

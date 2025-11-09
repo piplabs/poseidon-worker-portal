@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 interface Token {
   symbol: string;
@@ -24,7 +25,6 @@ interface TokenSelectorProps {
 
 
 export function TokenSelector({ 
-  selectedToken, 
   onTokenSelect, 
   tokens, 
   isOpen, 
@@ -94,9 +94,11 @@ export function TokenSelector({
                         <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
                       </svg>
                     ) : token.logo.startsWith('http') ? (
-                      <img 
+                      <Image 
                         src={token.logo} 
                         alt={token.symbol}
+                        width={24}
+                        height={24}
                         className="w-6 h-6 rounded-full object-cover"
                       />
                     ) : (

@@ -103,5 +103,6 @@ export function formatTransactionError(error: unknown): string | null {
   return 'Transaction failed. Please try again.';
 }
 
-export function logTransactionError(context: string, error: unknown): void {
+export function logTransactionError(): void {
+  // Placeholder for future logging implementation
 }

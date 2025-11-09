@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { BridgeInterface } from "@/components/bridge-interface";
 import { Navbar } from "@/components/navbar";
+import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
 import { 
   useWriteMintPsdnMint, 
   useWriteSubnetControlPlaneRegisterWorkerWithCapacity,
@@ -23,7 +24,8 @@ import { parseUnits, formatUnits } from "viem";
 import { motion } from "motion/react";
 import { CHAIN_IDS, MAX_UINT256, CONTRACT_ADDRESSES } from "@/lib/constants";
 import { isUserRejectedError, formatTransactionError } from "@/lib/error-utils";
-import { formatBalance } from "@/lib/utils";
+import { formatBalance, formatAmountOnBlur } from "@/lib/utils";
+import { TransactionStorage, type WithdrawalTransaction } from "@/lib/transaction-tracker";
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
@@ -114,6 +116,7 @@ export default function Home() {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApproveStakeSuccess, refetchStakeAllowance]);
   
   // Show success animation when mint is confirmed
@@ -153,9 +156,14 @@ export default function Home() {
   const { 
     writeContract: writeWithdrawStake, 
     isPending: isWithdrawStakePending,
-    isSuccess: isWithdrawStakeSuccess,
+    data: withdrawStakeTxHash,
     error: withdrawStakeError 
   } = useWriteSubnetControlPlaneWithdrawStake();
+
+  const { isSuccess: isWithdrawStakeSuccess } = useWaitForTransactionReceipt({
+    hash: withdrawStakeTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
   const { data: workerInfo, refetch: refetchWorkerInfo } = useReadSubnetControlPlaneGetWorkerInfo({
     args: address ? [address] : undefined,
     query: { 
@@ -237,6 +245,39 @@ export default function Home() {
     }
   };
 
+  // Track mint transaction
+  useEffect(() => {
+    if (mintTxHash && address) {
+      const existingTx = TransactionStorage.getById(mintTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: mintTxHash,
+          l1TxHash: mintTxHash,
+          status: 'pending',
+          type: 'MINT',
+          token: 'PSDN',
+          amount: mintAmount,
+          fromAddress: address,
+        });
+      }
+    }
+  }, [mintTxHash, address, mintAmount]);
+
+  // Mark mint transaction as completed
+  useEffect(() => {
+    if (isMintConfirmed && mintTxHash) {
+      const tx = TransactionStorage.getById(mintTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: mintTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isMintConfirmed, mintTxHash]);
+
   const handleApproveStake = async () => {
     if (!address) {
       openConnectModal?.();
@@ -296,6 +337,39 @@ export default function Home() {
     }
   };
 
+  // Track register worker transaction
+  useEffect(() => {
+    if (registerWorkerTxHash && address) {
+      const existingTx = TransactionStorage.getById(registerWorkerTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: registerWorkerTxHash,
+          l2TxHash: registerWorkerTxHash,
+          status: 'pending',
+          type: 'STAKE_REGISTER',
+          token: 'PSDN',
+          amount: stakeAmount,
+          fromAddress: address,
+        });
+      }
+    }
+  }, [registerWorkerTxHash, address, stakeAmount]);
+
+  // Mark register worker transaction as completed
+  useEffect(() => {
+    if (isRegisterWorkerSuccess && registerWorkerTxHash) {
+      const tx = TransactionStorage.getById(registerWorkerTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: registerWorkerTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isRegisterWorkerSuccess, registerWorkerTxHash]);
+
   const handleRequestUnstake = async () => {
     if (!address) {
       openConnectModal?.();
@@ -311,6 +385,39 @@ export default function Home() {
     }
   };
 
+  // Track request unstake transaction
+  useEffect(() => {
+    if (requestUnstakeTxHash && address) {
+      const existingTx = TransactionStorage.getById(requestUnstakeTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: requestUnstakeTxHash,
+          l2TxHash: requestUnstakeTxHash,
+          status: 'pending',
+          type: 'STAKE_UNSTAKE_REQUEST',
+          token: 'PSDN',
+          amount: workerInfo ? formatUnits(workerInfo.stakedAmount, 18) : '0',
+          fromAddress: address,
+        });
+      }
+    }
+  }, [requestUnstakeTxHash, address, workerInfo]);
+
+  // Mark request unstake transaction as completed
+  useEffect(() => {
+    if (isRequestUnstakeSuccess && requestUnstakeTxHash) {
+      const tx = TransactionStorage.getById(requestUnstakeTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: requestUnstakeTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isRequestUnstakeSuccess, requestUnstakeTxHash]);
+
   const handleWithdrawStake = async () => {
     if (!address) {
       openConnectModal?.();
@@ -325,6 +432,39 @@ export default function Home() {
       isUserRejectedError(err);
     }
   };
+
+  // Track withdraw stake transaction
+  useEffect(() => {
+    if (withdrawStakeTxHash && address) {
+      const existingTx = TransactionStorage.getById(withdrawStakeTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: withdrawStakeTxHash,
+          l2TxHash: withdrawStakeTxHash,
+          status: 'pending',
+          type: 'STAKE_WITHDRAW',
+          token: 'PSDN',
+          amount: workerInfo ? formatUnits(workerInfo.stakedAmount, 18) : '0',
+          fromAddress: address,
+        });
+      }
+    }
+  }, [withdrawStakeTxHash, address, workerInfo]);
+
+  // Mark withdraw stake transaction as completed
+  useEffect(() => {
+    if (isWithdrawStakeSuccess && withdrawStakeTxHash) {
+      const tx = TransactionStorage.getById(withdrawStakeTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: withdrawStakeTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isWithdrawStakeSuccess, withdrawStakeTxHash]);
 
   const handleClaimRewards = async () => {
     if (!address) {
@@ -342,6 +482,39 @@ export default function Home() {
       isUserRejectedError(err);
     }
   };
+
+  // Track claim rewards transaction
+  useEffect(() => {
+    if (claimRewardsTxHash && address) {
+      const existingTx = TransactionStorage.getById(claimRewardsTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: claimRewardsTxHash,
+          l2TxHash: claimRewardsTxHash,
+          status: 'pending',
+          type: 'STAKE_CLAIM_REWARDS',
+          token: 'PSDN',
+          amount: workerRewards ? formatUnits(workerRewards, 18) : '0',
+          fromAddress: address,
+        });
+      }
+    }
+  }, [claimRewardsTxHash, address, workerRewards]);
+
+  // Mark claim rewards transaction as completed
+  useEffect(() => {
+    if (isClaimRewardsSuccess && claimRewardsTxHash) {
+      const tx = TransactionStorage.getById(claimRewardsTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: claimRewardsTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isClaimRewardsSuccess, claimRewardsTxHash]);
 
   const handleSwitchToL2 = async () => {
     try {
@@ -415,9 +588,26 @@ export default function Home() {
     fetchQueues();
   }, []);
 
+  // Handler for when a transaction is selected from the pending transactions modal
+  const handleSelectTransaction = (transaction: WithdrawalTransaction) => {
+    // If it's a bridge transaction, switch to bridge tab
+    if (transaction.type === 'L1_TO_L2' || transaction.type === 'L2_TO_L1') {
+      setCurrentView('bridge');
+    }
+    // For other transaction types, stay on current tab or switch to relevant tab
+    else if (transaction.type === 'MINT') {
+      setCurrentView('mint');
+    }
+    else if (transaction.type === 'STAKE_REGISTER' || transaction.type === 'STAKE_UNSTAKE_REQUEST' || 
+             transaction.type === 'STAKE_WITHDRAW' || transaction.type === 'STAKE_CLAIM_REWARDS') {
+      setCurrentView('stake');
+    }
+  };
+
   return (
     <>
       <Navbar currentView={currentView} onViewChange={setCurrentView} />
+      <PendingTransactionsTab onSelectTransaction={handleSelectTransaction} />
       <main 
         className="min-h-screen bg-black text-white flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-24 relative overflow-hidden"
         style={{
@@ -1309,6 +1499,9 @@ export default function Home() {
                       if (value === '' || /^\d*\.?\d*$/.test(value)) {
                         setMintAmount(value);
                       }
+                    }}
+                    onBlur={() => {
+                      setMintAmount(formatAmountOnBlur(mintAmount));
                     }}
                     placeholder="0"
                     className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"

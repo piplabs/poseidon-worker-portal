@@ -12,7 +12,7 @@ interface PendingTransactionsTabProps {
 
 export function PendingTransactionsTab({ onSelectTransaction }: PendingTransactionsTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { activeTransactions, completedTransactions } = useWithdrawalTransactions();
+  const { activeTransactions } = useWithdrawalTransactions();
   
   const pendingCount = activeTransactions.length;
   const hasPending = pendingCount > 0;

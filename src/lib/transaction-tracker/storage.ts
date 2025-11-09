@@ -17,7 +17,7 @@ export class TransactionStorage {
       const data = localStorage.getItem(STORAGE_KEY);
       if (!data) return [];
       return JSON.parse(data);
-    } catch (error) {
+    } catch {
       return [];
     }
   }
@@ -182,7 +182,7 @@ export class TransactionStorage {
   private static saveAll(transactions: WithdrawalTransaction[]): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-    } catch (error) {
+    } catch {
       // Error silently ignored
     }
   }

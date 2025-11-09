@@ -79,7 +79,7 @@ function getProgress(status: TransactionStatus): number {
 }
 
 export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction }: PendingTransactionsModalProps) {
-  const { transactions, activeTransactions, completedTransactions, erroredTransactions } = useWithdrawalTransactions();
+  const { activeTransactions, completedTransactions } = useWithdrawalTransactions();
   const [selectedTab, setSelectedTab] = useState<'active' | 'completed'>('active');
 
   const displayTransactions = 
@@ -120,7 +120,7 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Bridge Transactions</h2>
+              <h2 className="text-lg font-semibold">Transactions</h2>
               <div className="flex items-center gap-2">
                 {activeTransactions.length > 0 && (
                   <Button
@@ -178,6 +178,7 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
               ) : (
                 displayTransactions.map((tx) => {
                   const isL2ToL1 = tx.type === 'L2_TO_L1';
+                  // Only L2_TO_L1 transactions are clickable (to open withdrawal steps modal)
                   const isClickable = isL2ToL1;
 
                   return (
@@ -209,7 +210,7 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
                           {tx.amount} {tx.token}
                         </span>
 
-                        {/* Direction Badge */}
+                        {/* Type Badge */}
                         <div className="flex-shrink-0">
                           {tx.type === 'L1_TO_L2' ? (
                             <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-300 border border-blue-500/30 font-medium">
@@ -217,13 +218,33 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
                               <span className="mx-0.5 text-gray-500">→</span>
                               <span className="text-purple-400">L2</span>
                             </span>
-                          ) : (
+                          ) : tx.type === 'L2_TO_L1' ? (
                             <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-purple-300 border border-purple-500/30 font-medium">
                               <span className="text-purple-400">L2</span>
                               <span className="mx-0.5 text-gray-500">→</span>
                               <span className="text-blue-400">L1</span>
                             </span>
-                          )}
+                          ) : tx.type === 'MINT' ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-300 border border-green-500/30 font-medium">
+                              Mint
+                            </span>
+                          ) : tx.type === 'STAKE_REGISTER' ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30 font-medium">
+                              Register
+                            </span>
+                          ) : tx.type === 'STAKE_UNSTAKE_REQUEST' ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-orange-500/20 to-amber-500/20 text-orange-300 border border-orange-500/30 font-medium">
+                              Unstake
+                            </span>
+                          ) : tx.type === 'STAKE_WITHDRAW' ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-300 border border-amber-500/30 font-medium">
+                              Withdraw
+                            </span>
+                          ) : tx.type === 'STAKE_CLAIM_REWARDS' ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-sm bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-pink-300 border border-pink-500/30 font-medium">
+                              Claim
+                            </span>
+                          ) : null}
                         </div>
 
                         {/* Spacer */}
@@ -238,9 +259,22 @@ export function PendingTransactionsModal({ isOpen, onClose, onSelectTransaction 
                           <span className="text-[10px] text-gray-600">
                             {new Date(tx.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          {tx.type === 'L1_TO_L2' && tx.l1TxHash && (
+                          {/* Show explorer link based on transaction type */}
+                          {((tx.type === 'L1_TO_L2' || tx.type === 'MINT') && tx.l1TxHash) && (
                             <a
                               href={getBlockExplorerUrl(tx.l1TxHash, CHAIN_IDS.L1)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-0.5 text-gray-500 hover:text-gray-300 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                              title="View transaction"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {(tx.type === 'L2_TO_L1' || tx.type === 'STAKE_REGISTER' || tx.type === 'STAKE_UNSTAKE_REQUEST' || tx.type === 'STAKE_WITHDRAW' || tx.type === 'STAKE_CLAIM_REWARDS') && tx.l2TxHash && (
+                            <a
+                              href={getBlockExplorerUrl(tx.l2TxHash, CHAIN_IDS.L2)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-0.5 text-gray-500 hover:text-gray-300 transition-colors"

@@ -55,7 +55,7 @@ export async function generateProof(
         actualProofBlock = latestBlock;
         break;
         
-      } catch (error) {
+      } catch {
         if (attempt < maxRetries) {
           // Wait a bit for new blocks before retry
           await new Promise(resolve => setTimeout(resolve, 3000));
@@ -118,7 +118,6 @@ export async function generateProof(
     ];
     
     let outputRootProof = null;
-    let matchingCandidate = -1;
     
     for (let i = 0; i < outputRootProofCandidates.length; i++) {
       const candidate = outputRootProofCandidates[i];
@@ -143,17 +142,15 @@ export async function generateProof(
         
         if (computedRoot.toLowerCase() === disputeGame.rootClaim.toLowerCase()) {
           outputRootProof = candidate;
-          matchingCandidate = i + 1;
           break;
         }
-      } catch (error) {
+      } catch {
         // Error silently ignored
       }
     }
     
     if (!outputRootProof) {
       outputRootProof = outputRootProofCandidates[0];
-      matchingCandidate = 1;
     }
     
     if (!proofResult || !proofResult.storageProof || proofResult.storageProof.length === 0) {
