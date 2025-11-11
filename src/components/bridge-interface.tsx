@@ -1690,6 +1690,8 @@ export function BridgeInterface() {
     }
     setIsWithdrawalModalOpen(false);
     setActiveWithdrawalTxId(null);
+    // Clear proof submission data to prevent state leakage to next transaction
+    setProofSubmissionData(null);
   }, [activeWithdrawalTxId]);
 
   // Note: handleSelectTransaction removed as we moved PendingTransactionsTab to page level
@@ -1767,6 +1769,9 @@ export function BridgeInterface() {
 
       // For L2 to L1 flows, create a temporary transaction and show modal first
       if (isL2ToL1) {
+        // Clear any previous proof submission data to prevent state leakage
+        setProofSubmissionData(null);
+        
         const tempTxId = `temp-${Date.now()}`;
         TransactionStorage.create({
           id: tempTxId,
