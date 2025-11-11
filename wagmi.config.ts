@@ -1,6 +1,6 @@
 import { defineConfig } from '@wagmi/cli'
 import { react } from '@wagmi/cli/plugins'
-import { mintPsdnAbi, bridgeAbi, l2BridgeAbi } from './src/lib/abi'
+import { mintPsdnAbi, bridgeAbi, l2BridgeAbi, subnetControlPlaneAbi } from './src/generated'
 
 
 export default defineConfig({
@@ -11,7 +11,7 @@ export default defineConfig({
   abi: mintPsdnAbi,
   address: {
     1518: '0xe085464511D76AEB51Aa3f7c6DdE2B2C5A42Ad46',
-    11711: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
+    111811: '0x30f627A3de293d408E89D4C3E40a41bbF638bC36',
   },
  },
 
@@ -19,7 +19,7 @@ export default defineConfig({
   name: "Bridge",
   abi: bridgeAbi,
   address: {
-    1518: '0xbB59cb9A7e0D88Ac5d04b7048b58f942aa058eae',
+    1518: '0x09E0A37b6A03a1561813DFdf3dA203e9bCc77232',
   },
  },
 
@@ -27,9 +27,18 @@ export default defineConfig({
   name: "L2Bridge",
   abi: l2BridgeAbi,
   address: {
-    11711: '0x4200000000000000000000000000000000000010',
+    111811: '0x4200000000000000000000000000000000000010',
+  }
+ }, 
+
+ {
+  name: "SubnetControlPlane",
+  abi: subnetControlPlaneAbi,
+  address: {
+    111811: '0x780caEECE73fF2f6D89d31f0a52aC4dAeA88fda2',
   }
  }
   ],
   plugins: [ react() ],
 })
+

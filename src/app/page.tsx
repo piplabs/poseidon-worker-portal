@@ -1,24 +1,298 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BridgeInterface } from "@/components/bridge-interface";
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { Button } from "@/components/ui/button";
-import { Coins, ArrowLeft } from "lucide-react";
-import { useWriteMintPsdnMint } from "@/generated";
-import { useAccount } from "wagmi";
-import { parseUnits } from "viem";
+import { Navbar } from "@/components/navbar";
+import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
+import { 
+  useWriteMintPsdnMint, 
+  useWriteSubnetControlPlaneRegisterWorkerWithCapacity,
+  useWriteSubnetControlPlaneRequestUnstake,
+  useWriteSubnetControlPlaneWithdrawStake,
+  useReadSubnetControlPlaneGetWorkerInfo,
+  useReadSubnetControlPlaneGetWorkerQueue,
+  useReadSubnetControlPlaneGetCurrentEpoch,
+  useReadSubnetControlPlaneGetWorkerRewards,
+  useWriteSubnetControlPlaneClaimRewardsFor,
+  useReadSubnetControlPlaneGetMinimumStake,
+  useReadSubnetControlPlanePoseidonToken,
+  useReadMintPsdnBalanceOf
+} from "@/generated";
+import { useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt, useReadContract, useWriteContract } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { parseUnits, formatUnits } from "viem";
 import { motion } from "motion/react";
+import { CHAIN_IDS, MAX_UINT256, CONTRACT_ADDRESSES } from "@/lib/constants";
+import { isUserRejectedError, formatTransactionError } from "@/lib/error-utils";
+import { formatBalance, formatAmountOnBlur } from "@/lib/utils";
+import { TransactionStorage, type WithdrawalTransaction } from "@/lib/transaction-tracker";
 
 export default function Home() {
-  const [currentView, setCurrentView] = useState<'bridge' | 'mint'>('bridge');
-  const [mintAmount, setMintAmount] = useState("100");
+  const [currentView, setCurrentView] = useState<'bridge' | 'mint' | 'stake'>('bridge');
+  const [mintAmount, setMintAmount] = useState("");
+  const [stakeAmount, setStakeAmount] = useState("");
+  const [workerCapacity, setWorkerCapacity] = useState("");
+  const [rewardEpochId, setRewardEpochId] = useState("");
+  const [selectedQueueName, setSelectedQueueName] = useState("");
+  const [queues, setQueues] = useState<string[]>([]);
+  const [showMintSuccess, setShowMintSuccess] = useState(false);
+  
+  // Track approval state for worker registration (same pattern as bridge)
+  const shouldContinueAfterStakeApproval = useRef(false);
+  const isRequestingStakeApproval = useRef(false);
+  const lastProcessedStakeApprovalHash = useRef<string | null>(null);
+  const lastStakeApprovalTimestamp = useRef<number>(0);
 
   const { address } = useAccount();
-  const { writeContract, isPending, isSuccess, error } = useWriteMintPsdnMint();
+  const chainId = useChainId();
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
+  
+  const isOnL2 = chainId === CHAIN_IDS.L2;
+  
+  const { writeContract, isPending, error, data: mintTxHash } = useWriteMintPsdnMint();
+  
+  const { isSuccess: isMintConfirmed, isLoading: isMintConfirming } = useWaitForTransactionReceipt({
+    hash: mintTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L1,
+  });
+
+  const { 
+    writeContract: writeApproveStake, 
+    isPending: isApproveStakePending,
+    data: approveStakeTxHash,
+    error: approveStakeError 
+  } = useWriteContract();
+  
+  const erc20Abi = [
+    {
+      type: 'function',
+      name: 'approve',
+      inputs: [
+        { name: 'spender', type: 'address' },
+        { name: 'amount', type: 'uint256' },
+      ],
+      outputs: [{ name: '', type: 'bool' }],
+      stateMutability: 'nonpayable',
+    },
+    {
+      type: 'function',
+      name: 'allowance',
+      inputs: [
+        { name: 'owner', type: 'address' },
+        { name: 'spender', type: 'address' },
+      ],
+      outputs: [{ name: '', type: 'uint256' }],
+      stateMutability: 'view',
+    },
+  ] as const;
+  
+  const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadContract({
+    address: CONTRACT_ADDRESSES.PSDN_L2 as `0x${string}`,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: address ? [address, CONTRACT_ADDRESSES.SUBNET_TREASURY] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 10000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+  
+  const { isSuccess: isApproveStakeSuccess } = useWaitForTransactionReceipt({
+    hash: approveStakeTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
+
+  // Handle approval success - automatically continue with worker registration
+  // Same pattern as bridge interface
+  useEffect(() => {
+    if (isApproveStakeSuccess && shouldContinueAfterStakeApproval.current && approveStakeTxHash) {
+      // Check if we've already processed this approval
+      if (lastProcessedStakeApprovalHash.current === approveStakeTxHash) {
+        return;
+      }
+      
+      // Mark this approval as processed
+      lastProcessedStakeApprovalHash.current = approveStakeTxHash;
+      lastStakeApprovalTimestamp.current = Date.now();
+      
+      // Refetch allowance and wait for it to update with proper polling
+      const refetchAndContinue = async () => {
+        // Wait a bit for blockchain state to propagate
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Poll the allowance until it updates (up to 15 seconds)
+        const maxAttempts = 15;
+        let attempts = 0;
+        let allowanceUpdated = false;
+        
+        while (attempts < maxAttempts && !allowanceUpdated) {
+          const result = await refetchStakeAllowance();
+          
+          // Check if allowance has increased (approval successful)
+          if (result.data && result.data > BigInt(0)) {
+            allowanceUpdated = true;
+            break;
+          }
+          
+          // Wait another second for the state to update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          attempts++;
+        }
+        
+        // Reset flags
+        shouldContinueAfterStakeApproval.current = false;
+        isRequestingStakeApproval.current = false;
+        
+        // Only proceed if allowance was updated or we've waited long enough
+        if (allowanceUpdated || attempts >= maxAttempts) {
+          // Additional delay to ensure state is fully updated, then re-trigger registration
+          setTimeout(() => {
+            handleRegisterWorker();
+          }, 500);
+        }
+      };
+      
+      refetchAndContinue();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproveStakeSuccess, approveStakeTxHash]);
+  
+  // Clear approval request flag if approval error occurs
+  useEffect(() => {
+    if (approveStakeError && isRequestingStakeApproval.current) {
+      isRequestingStakeApproval.current = false;
+      shouldContinueAfterStakeApproval.current = false;
+    }
+  }, [approveStakeError]);
+  
+  // Show success animation when mint is confirmed
+  useEffect(() => {
+    if (isMintConfirmed && mintTxHash) {
+      setShowMintSuccess(true);
+      setTimeout(() => {
+        setShowMintSuccess(false);
+      }, 3000);
+    }
+  }, [isMintConfirmed, mintTxHash]);
+  
+  const { 
+    writeContract: writeRegisterWorker, 
+    isPending: isRegisterWorkerPending, 
+    data: registerWorkerTxHash,
+    error: registerWorkerError 
+  } = useWriteSubnetControlPlaneRegisterWorkerWithCapacity();
+
+  const { isSuccess: isRegisterWorkerSuccess, isLoading: isRegisterWorkerConfirming } = useWaitForTransactionReceipt({
+    hash: registerWorkerTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { 
+    writeContract: writeRequestUnstake, 
+    isPending: isRequestUnstakePending,
+    data: requestUnstakeTxHash,
+    error: requestUnstakeError 
+  } = useWriteSubnetControlPlaneRequestUnstake();
+
+  const { isSuccess: isRequestUnstakeSuccess, isLoading: isRequestUnstakeConfirming } = useWaitForTransactionReceipt({
+    hash: requestUnstakeTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
+  
+  const { 
+    writeContract: writeWithdrawStake, 
+    isPending: isWithdrawStakePending,
+    data: withdrawStakeTxHash,
+    error: withdrawStakeError 
+  } = useWriteSubnetControlPlaneWithdrawStake();
+
+  const { isSuccess: isWithdrawStakeSuccess } = useWaitForTransactionReceipt({
+    hash: withdrawStakeTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
+  const { data: workerInfo, refetch: refetchWorkerInfo } = useReadSubnetControlPlaneGetWorkerInfo({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { data: workerQueue } = useReadSubnetControlPlaneGetWorkerQueue({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { data: currentEpoch } = useReadSubnetControlPlaneGetCurrentEpoch({
+    query: { 
+      enabled: isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+  
+  const currentEpochId = currentEpoch?.epochId;
+
+  const { data: minimumStake } = useReadSubnetControlPlaneGetMinimumStake({
+    query: { 
+      enabled: isOnL2,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { data: psdnL2Balance, refetch: refetchPsdnL2Balance } = useReadMintPsdnBalanceOf({
+    args: address ? [address] : undefined,
+    query: { 
+      enabled: !!address && isOnL2,
+      refetchInterval: 5000,
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+  // Initialize rewardEpochId with current epoch when it becomes available
+  useEffect(() => {
+    if (currentEpochId && !rewardEpochId) {
+      setRewardEpochId(currentEpochId.toString());
+    }
+  }, [currentEpochId, rewardEpochId]);
+
+  // Use rewardEpochId if provided, otherwise use currentEpochId
+  const epochToQuery = rewardEpochId ? BigInt(rewardEpochId) : currentEpochId;
+  
+  const { data: workerRewards, refetch: refetchWorkerRewards } = useReadSubnetControlPlaneGetWorkerRewards({
+    args: address && epochToQuery !== undefined ? [address, epochToQuery] : undefined,
+    query: { 
+      enabled: !!address && isOnL2 && epochToQuery !== undefined,
+      refetchInterval: 1000, // Poll every 1 second to update rewards based on entered epoch
+    },
+    chainId: CHAIN_IDS.L2,
+  });
+
+  const { 
+    writeContract: writeClaimRewards, 
+    isPending: isClaimRewardsPending,
+    data: claimRewardsTxHash,
+    error: claimRewardsError 
+  } = useWriteSubnetControlPlaneClaimRewardsFor();
+
+  const { isLoading: isClaimRewardsConfirming, isSuccess: isClaimRewardsSuccess } = useWaitForTransactionReceipt({
+    hash: claimRewardsTxHash as `0x${string}`,
+    chainId: CHAIN_IDS.L2,
+  });
 
   const handleMint = async () => {
-    if (!address || !mintAmount) return;
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    if (!mintAmount) return;
     
     try {
       const amount = parseUnits(mintAmount, 18);
@@ -26,45 +300,1224 @@ export default function Home() {
         args: [address, amount],
       });
     } catch (err) {
-      console.error("Mint failed:", err);
+      isUserRejectedError(err);
+    }
+  };
+
+  // Track mint transaction
+  useEffect(() => {
+    if (mintTxHash && address) {
+      const existingTx = TransactionStorage.getById(mintTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: mintTxHash,
+          l1TxHash: mintTxHash,
+          status: 'pending',
+          type: 'MINT',
+          token: 'PSDN',
+          amount: mintAmount,
+          fromAddress: address,
+        });
+      }
+    }
+  }, [mintTxHash, address, mintAmount]);
+
+  // Mark mint transaction as completed
+  useEffect(() => {
+    if (isMintConfirmed && mintTxHash) {
+      const tx = TransactionStorage.getById(mintTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: mintTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isMintConfirmed, mintTxHash]);
+
+
+  const handleMinStakeClick = () => {
+    if (minimumStake) {
+      setStakeAmount(formatUnits(minimumStake, 18));
+    }
+  };
+
+  const handleMaxStakeClick = () => {
+    if (psdnL2Balance) {
+      setStakeAmount(formatUnits(psdnL2Balance, 18));
+    }
+  };
+
+  const handleRegisterWorker = async () => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    if (!stakeAmount || !workerCapacity || !selectedQueueName) {
+      return;
+    }
+    
+    // Prevent triggering if approval is already in progress
+    if (isApproveStakePending || isRequestingStakeApproval.current) {
+      return;
+    }
+    
+    try {
+      const amount = parseUnits(stakeAmount, 18);
+      const capacity = BigInt(workerCapacity);
+      
+      const requiredStake = capacity * BigInt(100);
+      if (requiredStake > amount) {
+        return;
+      }
+      
+      // Check balance first
+      const currentBalance = psdnL2Balance || BigInt(0);
+      if (currentBalance < amount) {
+        console.error('Insufficient PSDN balance on L2');
+        return;
+      }
+      
+      // Check if approval is needed (same pattern as bridge)
+      const needsApproval = !stakeAllowance || stakeAllowance < amount;
+      
+      if (needsApproval) {
+        // Guard: Prevent requesting approval if one was just processed (within last 10 seconds)
+        const timeSinceLastApproval = Date.now() - lastStakeApprovalTimestamp.current;
+        if (timeSinceLastApproval < 10000) {
+          console.log('Approval was just processed, waiting for allowance to update...');
+          return;
+        }
+        
+        // Set flags to auto-continue after approval and prevent duplicate requests
+        shouldContinueAfterStakeApproval.current = true;
+        isRequestingStakeApproval.current = true;
+        
+        // Approve max amount to avoid future approvals
+        // Use PSDN_L2 address directly (same as bridge pattern)
+        await writeApproveStake({
+          address: CONTRACT_ADDRESSES.PSDN_L2 as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'approve',
+          args: [CONTRACT_ADDRESSES.SUBNET_TREASURY, BigInt(MAX_UINT256)],
+          chainId: CHAIN_IDS.L2,
+        });
+        
+        // Note: The actual registration will happen automatically after approval confirms
+        return;
+      }
+      
+      // If we have approval, proceed with registration
+      await writeRegisterWorker({
+        args: [amount, capacity, selectedQueueName],
+      });
+    } catch (err) {
+      isUserRejectedError(err);
+    }
+  };
+
+  // Track register worker transaction
+  useEffect(() => {
+    if (registerWorkerTxHash && address) {
+      const existingTx = TransactionStorage.getById(registerWorkerTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: registerWorkerTxHash,
+          l2TxHash: registerWorkerTxHash,
+          status: 'pending',
+          type: 'STAKE_REGISTER',
+          token: 'PSDN',
+          amount: stakeAmount,
+          fromAddress: address,
+        });
+      }
+    }
+  }, [registerWorkerTxHash, address, stakeAmount]);
+
+  // Mark register worker transaction as completed
+  useEffect(() => {
+    if (isRegisterWorkerSuccess && registerWorkerTxHash) {
+      const tx = TransactionStorage.getById(registerWorkerTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: registerWorkerTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isRegisterWorkerSuccess, registerWorkerTxHash]);
+
+  const handleRequestUnstake = async () => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    
+    try {
+      await writeRequestUnstake({
+        args: [],
+      });
+    } catch (err) {
+      isUserRejectedError(err);
+    }
+  };
+
+  // Track request unstake transaction
+  useEffect(() => {
+    if (requestUnstakeTxHash && address) {
+      const existingTx = TransactionStorage.getById(requestUnstakeTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: requestUnstakeTxHash,
+          l2TxHash: requestUnstakeTxHash,
+          status: 'pending',
+          type: 'STAKE_UNSTAKE_REQUEST',
+          token: 'PSDN',
+          amount: workerInfo ? formatUnits(workerInfo.stakedAmount, 18) : '0',
+          fromAddress: address,
+        });
+      }
+    }
+  }, [requestUnstakeTxHash, address, workerInfo]);
+
+  // Mark request unstake transaction as completed
+  useEffect(() => {
+    if (isRequestUnstakeSuccess && requestUnstakeTxHash) {
+      const tx = TransactionStorage.getById(requestUnstakeTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: requestUnstakeTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isRequestUnstakeSuccess, requestUnstakeTxHash]);
+
+  const handleWithdrawStake = async () => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    
+    try {
+      await writeWithdrawStake({
+        args: [address],
+      });
+    } catch (err) {
+      isUserRejectedError(err);
+    }
+  };
+
+  // Track withdraw stake transaction
+  useEffect(() => {
+    if (withdrawStakeTxHash && address) {
+      const existingTx = TransactionStorage.getById(withdrawStakeTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: withdrawStakeTxHash,
+          l2TxHash: withdrawStakeTxHash,
+          status: 'pending',
+          type: 'STAKE_WITHDRAW',
+          token: 'PSDN',
+          amount: workerInfo ? formatUnits(workerInfo.stakedAmount, 18) : '0',
+          fromAddress: address,
+        });
+      }
+    }
+  }, [withdrawStakeTxHash, address, workerInfo]);
+
+  // Mark withdraw stake transaction as completed
+  useEffect(() => {
+    if (isWithdrawStakeSuccess && withdrawStakeTxHash) {
+      const tx = TransactionStorage.getById(withdrawStakeTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: withdrawStakeTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isWithdrawStakeSuccess, withdrawStakeTxHash]);
+
+  const handleClaimRewards = async () => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
+    if (!rewardEpochId) return;
+    
+    try {
+      const epochId = BigInt(rewardEpochId);
+      await writeClaimRewards({
+        args: [address, epochId],
+      });
+    } catch (err) {
+      isUserRejectedError(err);
+    }
+  };
+
+  // Track claim rewards transaction
+  useEffect(() => {
+    if (claimRewardsTxHash && address) {
+      const existingTx = TransactionStorage.getById(claimRewardsTxHash);
+      
+      if (!existingTx) {
+        TransactionStorage.create({
+          id: claimRewardsTxHash,
+          l2TxHash: claimRewardsTxHash,
+          status: 'pending',
+          type: 'STAKE_CLAIM_REWARDS',
+          token: 'PSDN',
+          amount: workerRewards ? formatUnits(workerRewards, 18) : '0',
+          fromAddress: address,
+        });
+      }
+    }
+  }, [claimRewardsTxHash, address, workerRewards]);
+
+  // Mark claim rewards transaction as completed
+  useEffect(() => {
+    if (isClaimRewardsSuccess && claimRewardsTxHash) {
+      const tx = TransactionStorage.getById(claimRewardsTxHash);
+      if (tx && tx.status === 'pending') {
+        TransactionStorage.update({
+          id: claimRewardsTxHash,
+          status: 'completed',
+          completedAt: Date.now(),
+        });
+      }
+    }
+  }, [isClaimRewardsSuccess, claimRewardsTxHash]);
+
+  const handleSwitchToL2 = async () => {
+    try {
+      await switchChain({ chainId: CHAIN_IDS.L2 });
+    } catch (error) {
+      isUserRejectedError(error);
+    }
+  };
+
+  const handleSwitchToL1 = async () => {
+    try {
+      await switchChain({ chainId: CHAIN_IDS.L1 });
+    } catch (error) {
+      isUserRejectedError(error);
+    }
+  };
+
+  const isOnL1 = chainId === CHAIN_IDS.L1;
+
+  // Refetch worker info and balance after registration, unstake request, or withdrawal
+  useEffect(() => {
+    if (isRegisterWorkerSuccess || isRequestUnstakeSuccess || isWithdrawStakeSuccess) {
+      refetchWorkerInfo();
+      refetchPsdnL2Balance();
+    }
+  }, [isRegisterWorkerSuccess, isRequestUnstakeSuccess, isWithdrawStakeSuccess, refetchWorkerInfo, refetchPsdnL2Balance]);
+
+  // Refetch worker rewards after claiming
+  useEffect(() => {
+    if (isClaimRewardsSuccess) {
+      refetchWorkerRewards();
+      refetchWorkerInfo();
+    }
+  }, [isClaimRewardsSuccess, refetchWorkerRewards, refetchWorkerInfo]);
+
+  // Validate and adjust capacity when stake amount changes
+  useEffect(() => {
+    if (workerCapacity && stakeAmount) {
+      const maxCapacity = Math.floor(parseFloat(stakeAmount) / 100);
+      const currentCapacity = parseInt(workerCapacity);
+      
+      // If current capacity exceeds max allowed, cap it
+      if (currentCapacity > maxCapacity) {
+        setWorkerCapacity(maxCapacity > 0 ? maxCapacity.toString() : "");
+      }
+    }
+  }, [stakeAmount, workerCapacity]);
+
+  // Set default epoch to current epoch
+  useEffect(() => {
+    if (currentEpochId && !rewardEpochId) {
+      setRewardEpochId(currentEpochId.toString());
+    }
+  }, [currentEpochId, rewardEpochId]);
+
+  // Fetch queues from API
+  useEffect(() => {
+    const fetchQueues = async () => {
+      try {
+        const response = await fetch('/api/queues');
+        const data = await response.json() as { items?: Array<{ queueName: string }> };
+        if (data.items && Array.isArray(data.items)) {
+          const queueNames = data.items.map((item) => item.queueName);
+          setQueues(queueNames);
+        }
+      } catch (error) {
+        console.error('Failed to fetch queues:', error);
+      }
+    };
+
+    fetchQueues();
+  }, []);
+
+  // Handler for when a transaction is selected from the pending transactions modal
+  const handleSelectTransaction = (transaction: WithdrawalTransaction) => {
+    // If it's a bridge transaction, switch to bridge tab
+    if (transaction.type === 'L1_TO_L2' || transaction.type === 'L2_TO_L1') {
+      setCurrentView('bridge');
+    }
+    // For other transaction types, stay on current tab or switch to relevant tab
+    else if (transaction.type === 'MINT') {
+      setCurrentView('mint');
+    }
+    else if (transaction.type === 'STAKE_REGISTER' || transaction.type === 'STAKE_UNSTAKE_REQUEST' || 
+             transaction.type === 'STAKE_WITHDRAW' || transaction.type === 'STAKE_CLAIM_REWARDS') {
+      setCurrentView('stake');
     }
   };
 
   return (
-    <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative">
-      {/* Connect Button in top right */}
-      <div className="absolute top-4 right-4 z-10">
-        <ConnectButton />
-      </div>
+    <>
+      <Navbar currentView={currentView} onViewChange={setCurrentView} />
+      <PendingTransactionsTab onSelectTransaction={handleSelectTransaction} />
+      <main 
+        className="min-h-screen bg-black text-white flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-24 relative overflow-hidden"
+        style={{
+          backgroundImage: 'url(/hero-bg.svg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {/* Overlay to slightly dim the background pattern for better content readability */}
+        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+        
+        {/* Content container with proper z-index */}
+        <div className="relative z-10 w-full flex items-center justify-center">
+          {/* Content based on current view */}
+          {currentView === 'bridge' ? (
+            <BridgeInterface />
+          ) : currentView === 'stake' ? (
+            <div className="w-full max-w-7xl mx-auto px-4">
+              {/* Dashboard Header */}
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="mb-6"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h1 className="text-3xl font-bold">Worker Portal</h1>
+                    <p className="text-muted-foreground text-sm">
+                      {workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0)
+                        ? "Manage your worker registration and stake"
+                        : "Register as a worker to start earning rewards"}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="px-3 py-1.5 text-xs font-bold rounded-full bg-gray-800/30 text-gray-300 border border-gray-700/30">
+                      Proteus L2
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
 
-      {/* Navigation Button */}
-      <div className="absolute top-4 left-4 z-10">
-        {currentView === 'bridge' ? (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center space-x-2"
-            onClick={() => setCurrentView('mint')}
-          >
-            <Coins className="h-4 w-4" />
-            <span>Mint PSDN</span>
-          </Button>
-        ) : (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center space-x-2"
-            onClick={() => setCurrentView('bridge')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Bridge</span>
-          </Button>
-        )}
-      </div>
-      
-      {/* Content based on current view */}
-      {currentView === 'bridge' ? (
-        <BridgeInterface />
+              {/* Current Epoch Banner */}
+              {isOnL2 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className="mb-6"
+                >
+                  <div className="bg-gradient-to-r from-cyan-500/30 via-blue-500/30 to-purple-500/30 rounded-xl p-4 border border-cyan-500/40">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Current Epoch</p>
+                          <p className="text-3xl font-bold text-white">
+                            {currentEpochId ? currentEpochId.toString() : "Loading..."}
+                          </p>
+                        </div>
+                        <div className="h-12 w-px bg-white/10"></div>
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Status</p>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                            <span className="text-sm text-cyan-300 font-semibold">Network Live</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500">Updates every 5 seconds</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Quick Stats Grid - Top */}
+              {isOnL2 && address && workerInfo && workerInfo.registeredAt > BigInt(0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                  className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"
+                >
+                  {/* Staked Amount Card */}
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Staked Amount</p>
+                    </div>
+                    <p className="text-2xl font-bold text-white mb-1">
+                      {formatUnits(workerInfo.stakedAmount, 18)}
+                    </p>
+                    <p className="text-xs text-gray-500">PSDN</p>
+                  </div>
+
+                  {/* Status Card */}
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Worker Status</p>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      {workerInfo.isActive ? (
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-700/30 text-gray-300 border border-gray-600/30">
+                          ● Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                          ○ Inactive
+                        </span>
+                      )}
+                      {workerInfo.isJailed && (
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-700/30 text-gray-300 border border-gray-600/30">
+                          ⚠ Jailed
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">Real-time</p>
+                  </div>
+
+                  {/* Missed Heartbeats Card */}
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Missed Heartbeats</p>
+                    </div>
+                    <p className="text-2xl font-bold text-white mb-1">
+                      {workerInfo.missedHeartbeats.toString()}
+                    </p>
+                    <p className="text-xs text-gray-500">Total Count</p>
+                  </div>
+
+                  {/* Last Heartbeat Card */}
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">Last Heartbeat</p>
+                    </div>
+                    {workerInfo.lastHeartbeat > BigInt(0) ? (
+                      <>
+                        <p className="text-sm font-semibold text-white">
+                          {new Date(Number(workerInfo.lastHeartbeat) * 1000).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(Number(workerInfo.lastHeartbeat) * 1000).toLocaleTimeString()}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-500">Never</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Unstake Alert Banner */}
+              {isOnL2 && address && workerInfo && workerInfo.registeredAt > BigInt(0) && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.25 }}
+                  className="mb-6"
+                >
+                  <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-300">Unstake Request Pending</p>
+                          <p className="text-xs text-gray-400/70 mt-0.5">
+                            Requested: {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()} {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400/70">Effective Epoch</p>
+                        <p className="text-2xl font-bold text-gray-200">
+                          {workerInfo.unstakeEffectiveEpoch.toString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Worker Details Card */}
+              {isOnL2 && address && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                  className="mb-6"
+                >
+                  <div className="bg-card border rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Worker Details</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {workerInfo && workerInfo.registeredAt > BigInt(0) 
+                            ? "Your worker registration information"
+                            : "Not registered as a worker"}
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500">Updated: {new Date().toLocaleTimeString()}</p>
+                    </div>
+
+                    {/* Worker Address */}
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground mb-1">Worker Address</p>
+                      <p className="text-sm font-mono text-foreground break-all">{address}</p>
+                    </div>
+                    
+                    {/* Registration Info Grid */}
+                    {workerInfo && workerInfo.registeredAt > BigInt(0) && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Registered At</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleDateString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {new Date(Number(workerInfo.registeredAt) * 1000).toLocaleTimeString()}
+                          </p>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Total Stake</p>
+                          <p className="text-lg font-bold text-foreground">
+                            {formatUnits(workerInfo.stakedAmount, 18)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">PSDN</p>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Worker Capacity</p>
+                          <p className="text-lg font-bold text-foreground">
+                            {workerInfo.capacity.toString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Max concurrent tasks
+                          </p>
+                        </div>
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Queue</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {workerQueue || 'N/A'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Work queue name
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Actions Grid - Conditional rendering based on worker registration */}
+              {/* Check if worker is NOT registered OR has withdrawn all stake (inactive) */}
+              {(!workerInfo || workerInfo.registeredAt === BigInt(0) || workerInfo.stakedAmount === BigInt(0)) ? (
+                // When NOT registered or inactive with 0 stake: Show registration layout
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6">
+                  {/* Info Card */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                    className="lg:col-span-2"
+                  >
+                    <div className="bg-card border rounded-xl p-6 space-y-4 h-full">
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-foreground mb-2">Become a Worker</h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            Register as a worker to process tasks and earn rewards. Your stake determines your capacity and commitment to the network.
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3 pt-4 border-t border-white/10">
+                        <div className="flex items-start space-x-3">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Earn Rewards</p>
+                            <p className="text-xs text-muted-foreground">Get paid for completing tasks</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Flexible Capacity</p>
+                            <p className="text-xs text-muted-foreground">Choose your work capacity based on stake</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Withdrawable Stake</p>
+                            <p className="text-xs text-muted-foreground">Unstake anytime with a cooldown period</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Registration Form */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="lg:col-span-3"
+                  >
+                    <div className="bg-card border rounded-xl p-6 space-y-4">
+                      <div className="pb-3 border-b border-white/10">
+                        <h3 className="text-lg font-bold">Register Worker</h3>
+                        <p className="text-xs text-muted-foreground mt-1">Complete the form below to register as a worker</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        {/* Queue Selection Dropdown */}
+                        <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Queue</span>
+                            <span className="text-xs text-muted-foreground">Select work queue</span>
+                          </div>
+                          <select
+                            value={selectedQueueName}
+                            onChange={(e) => setSelectedQueueName(e.target.value)}
+                            className="w-full text-sm font-medium text-foreground bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-200"
+                          >
+                            <option value="" disabled>Select a queue...</option>
+                            {queues.map((queueName) => (
+                              <option key={queueName} value={queueName}>
+                                {queueName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Amount</span>
+                            <div className="flex items-center gap-2">
+                              {psdnL2Balance && (
+                                <span className="text-xs text-muted-foreground">
+                                  {formatBalance(psdnL2Balance)} available
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">PSDN</span>
+                            </div>
+                          </div>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={stakeAmount}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty string, numbers, and one decimal point
+                              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setStakeAmount(value);
+                              }
+                            }}
+                            placeholder="0.00"
+                            className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                          />
+                          <div className="flex items-center justify-between">
+                            {minimumStake && (
+                              <p className="text-xs text-gray-500">
+                                Minimum: {formatUnits(minimumStake, 18)} PSDN
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2">
+                              {minimumStake && (
+                                <button
+                                  onClick={handleMinStakeClick}
+                                  className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                                >
+                                  MIN
+                                </button>
+                              )}
+                              {psdnL2Balance && (
+                                <button
+                                  onClick={handleMaxStakeClick}
+                                  className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 hover:bg-muted/70 border border-border/30 hover:border-border/50 rounded-lg transition-all duration-200"
+                                >
+                                  MAX
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Capacity Selection */}
+                        <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Worker Capacity</span>
+                            <span className="text-xs text-muted-foreground">
+                              {stakeAmount && !isNaN(parseFloat(stakeAmount)) ? (
+                                `Max: ${Math.floor(parseFloat(stakeAmount) / 100)}`
+                              ) : (
+                                'Enter stake first'
+                              )}
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={workerCapacity}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty string and non-negative integers
+                              if (value === '' || /^\d+$/.test(value)) {
+                                // Validate against max capacity
+                                if (stakeAmount && value !== '') {
+                                  const maxCapacity = Math.floor(parseFloat(stakeAmount) / 100);
+                                  const numValue = parseInt(value);
+                                  if (numValue <= maxCapacity && numValue >= 0) {
+                                    setWorkerCapacity(value);
+                                  } else if (numValue > maxCapacity) {
+                                    // Cap at max capacity
+                                    setWorkerCapacity(maxCapacity.toString());
+                                  }
+                                } else {
+                                  setWorkerCapacity(value);
+                                }
+                              }
+                            }}
+                            placeholder="0"
+                            disabled={!stakeAmount || isNaN(parseFloat(stakeAmount))}
+                            className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                          <p className="text-xs text-gray-500">
+                            Requires: {workerCapacity ? parseInt(workerCapacity) * 100 : 0} PSDN minimum
+                          </p>
+                        </div>
+
+                        {/* Network Check and Register Button */}
+                        {!address ? (
+                          <button
+                            onClick={() => openConnectModal?.()}
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Connect Wallet
+                          </button>
+                        ) : !isOnL2 ? (
+                          <button
+                            onClick={handleSwitchToL2}
+                            disabled={isSwitchingChain}
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleRegisterWorker}
+                            disabled={
+                              isRegisterWorkerPending || 
+                              isRegisterWorkerConfirming ||
+                              isApproveStakePending ||
+                              (!!approveStakeTxHash && !isApproveStakeSuccess) ||
+                              stakeAmount === "" || 
+                              workerCapacity === "" || 
+                              workerCapacity === "0" ||
+                              selectedQueueName === "" ||
+                              (!!workerCapacity && !!stakeAmount && parseInt(workerCapacity) * 100 > parseFloat(stakeAmount))
+                            }
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isApproveStakePending || (approveStakeTxHash && !isApproveStakeSuccess) ? "Approving..." : 
+                             (isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : 
+                             isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
+                          </button>
+                        )}
+
+                        {/* Status Messages */}
+                        {approveStakeError && formatTransactionError(approveStakeError) && (
+                          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                            <p className="text-destructive text-xs font-medium">
+                              {formatTransactionError(approveStakeError)}
+                            </p>
+                          </div>
+                        )}
+
+                        {registerWorkerError && formatTransactionError(registerWorkerError) && (
+                          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                            <p className="text-destructive text-xs font-medium">
+                              {formatTransactionError(registerWorkerError)}
+                            </p>
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              ) : (
+                // When registered: Show Claim Rewards and Unstake & Withdraw cards
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  {/* Claim Rewards Card */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="bg-card border rounded-xl p-6 space-y-4"
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Claim Rewards</h3>
+                        <p className="text-xs text-muted-foreground">For specific epoch</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Current Rewards Display */}
+                      <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-gray-400 mb-1">Available Rewards</p>
+                            <p className="text-lg font-bold text-white">
+                              {workerRewards ? formatUnits(workerRewards, 18) : "0.00"} <span className="text-xs text-gray-500">PSDN</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Epoch Input */}
+                      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Epoch ID</span>
+                          {currentEpochId && (
+                            <span className="text-xs text-muted-foreground">
+                              Current: {currentEpochId.toString()}
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={rewardEpochId}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string or only integers (no decimal point)
+                            if (value === '' || /^\d+$/.test(value)) {
+                              setRewardEpochId(value);
+                            }
+                          }}
+                          placeholder={currentEpochId ? currentEpochId.toString() : "Enter epoch ID"}
+                          className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Enter any epoch ID to view and claim rewards from that epoch
+                        </p>
+                      </div>
+
+                      {/* Claim Button */}
+                      {!address ? (
+                        <button
+                          onClick={() => openConnectModal?.()}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Connect Wallet
+                        </button>
+                      ) : !isOnL2 ? (
+                        <button
+                          onClick={handleSwitchToL2}
+                          disabled={isSwitchingChain}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSwitchingChain ? "Switching..." : "Switch to L2"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleClaimRewards}
+                          disabled={isClaimRewardsPending || isClaimRewardsConfirming || !rewardEpochId || !workerInfo.isActive || !workerRewards || workerRewards === BigInt(0)}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isClaimRewardsPending || isClaimRewardsConfirming ? "Claiming..." : "Claim Rewards"}
+                        </button>
+                      )}
+
+                      {/* Status Messages */}
+                      {claimRewardsError && formatTransactionError(claimRewardsError) && (
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-destructive text-xs font-medium">
+                            {formatTransactionError(claimRewardsError)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {/* Unstake & Withdraw Card */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                    className="bg-card border rounded-xl p-6 space-y-6"
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <h3 className="text-lg font-bold">Unstake & Withdraw</h3>
+                        <p className="text-xs text-muted-foreground">Two-step process</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      {/* Process Steps Visualization */}
+                      {isOnL2 && address && (
+                        <div className="space-y-4">
+                          {/* Step 1 */}
+                          <div className="relative">
+                            <div className="flex items-start space-x-4">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                  workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                    ? 'bg-gray-800/60 border-gray-600 text-gray-300'
+                                    : 'bg-gray-800/60 border-gray-700 text-gray-500'
+                                }`}>
+                                  {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) ? (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <span className="text-sm font-bold">1</span>
+                                  )}
+                                </div>
+                                {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
+                                  <div className="w-0.5 h-8 bg-gray-700/50 mt-2"></div>
+                                )}
+                              </div>
+                              <div className="flex-1 pt-1">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">Request Unstake</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                        ? "Request submitted"
+                                        : "Initiate unstake request"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {workerInfo && workerInfo.unstakeRequestedAt === BigInt(0) && (
+                                  !address ? (
+                                    <button
+                                      onClick={() => openConnectModal?.()}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      Connect Wallet
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={handleRequestUnstake}
+                                      disabled={isRequestUnstakePending || isRequestUnstakeConfirming}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {(isRequestUnstakePending || isRequestUnstakeConfirming) ? (
+                                        <>
+                                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                          Requesting...
+                                        </>
+                                      ) : isRequestUnstakeSuccess ? (
+                                        "Requested!"
+                                      ) : (
+                                        "Request Unstake"
+                                      )}
+                                    </button>
+                                  )
+                                )}
+                                {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && (
+                                  <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">
+                                    <p className="text-xs text-gray-400">
+                                      Requested on {new Date(Number(workerInfo.unstakeRequestedAt) * 1000).toLocaleDateString()}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Effective epoch: {workerInfo.unstakeEffectiveEpoch.toString()}
+                                    </p>
+                                  </div>
+                                )}
+                                {requestUnstakeError && formatTransactionError(requestUnstakeError) && (
+                                  <div className="mt-2 p-2.5 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                    <p className="text-destructive text-xs font-medium">
+                                      {formatTransactionError(requestUnstakeError)}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Step 2 */}
+                          <div className="relative">
+                            <div className="flex items-start space-x-4">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                  workerInfo && workerInfo.stakedAmount === BigInt(0)
+                                    ? 'bg-gray-800/60 border-gray-600 text-gray-300'
+                                    : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                    ? 'bg-gray-800/60 border-gray-600 text-gray-300'
+                                    : 'bg-gray-800/60 border-gray-700 text-gray-500 opacity-50'
+                                }`}>
+                                  {workerInfo && workerInfo.stakedAmount === BigInt(0) ? (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <span className="text-sm font-bold">2</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex-1 pt-1">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">Withdraw Stake</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      {workerInfo && workerInfo.stakedAmount === BigInt(0)
+                                        ? "Stake withdrawn"
+                                        : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && currentEpochId && currentEpochId < workerInfo.unstakeEffectiveEpoch
+                                        ? `Wait until epoch ${workerInfo.unstakeEffectiveEpoch.toString()}`
+                                        : workerInfo && workerInfo.unstakeRequestedAt > BigInt(0)
+                                        ? "Ready to withdraw"
+                                        : "Complete step 1 first"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {workerInfo && workerInfo.unstakeRequestedAt > BigInt(0) && workerInfo.stakedAmount > BigInt(0) && (
+                                  !address ? (
+                                    <button
+                                      onClick={() => openConnectModal?.()}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      Connect Wallet
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={handleWithdrawStake}
+                                      disabled={isWithdrawStakePending || !currentEpochId || currentEpochId < workerInfo.unstakeEffectiveEpoch}
+                                      className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {isWithdrawStakePending ? (
+                                        <>
+                                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                          Withdrawing...
+                                        </>
+                                      ) : isWithdrawStakeSuccess ? (
+                                        "Withdrawn!"
+                                      ) : currentEpochId && currentEpochId < workerInfo.unstakeEffectiveEpoch ? (
+                                        `Withdraw (Epoch ${currentEpochId.toString()}/${workerInfo.unstakeEffectiveEpoch.toString()})`
+                                      ) : (
+                                        "Withdraw Stake"
+                                      )}
+                                    </button>
+                                  )
+                                )}
+                                {workerInfo && workerInfo.stakedAmount === BigInt(0) && (
+                                  <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">
+                                    <p className="text-xs text-gray-400">
+                                      Your stake has been successfully withdrawn
+                                    </p>
+                                  </div>
+                                )}
+                                {!workerInfo || workerInfo.unstakeRequestedAt === BigInt(0) ? (
+                                  <div className="bg-gray-800/30 rounded-lg p-3 border border-gray-700/20">
+                                    <p className="text-xs text-gray-500">
+                                      Complete step 1 to unlock withdrawal
+                                    </p>
+                                  </div>
+                                ) : null}
+                                {withdrawStakeError && formatTransactionError(withdrawStakeError) && (
+                                  <div className="mt-2 p-2.5 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                    <p className="text-destructive text-xs font-medium">
+                                      {formatTransactionError(withdrawStakeError)}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Network Switch */}
+                      {!address ? (
+                        <button
+                          onClick={() => openConnectModal?.()}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Connect Wallet
+                        </button>
+                      ) : !isOnL2 && (
+                        <button
+                          onClick={handleSwitchToL2}
+                          disabled={isSwitchingChain}
+                          className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium text-white bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700/50 hover:border-gray-600/50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSwitchingChain ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Switching...
+                            </>
+                          ) : (
+                            "Switch to L2"
+                          )}
+                        </button>
+                      )}
+
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </div>
       ) : (
         <div className="w-full max-w-md mx-auto">
           <motion.div 
@@ -73,19 +1526,15 @@ export default function Home() {
             transition={{ duration: 0.6, ease: "easeOut" }}
             className="bg-card text-card-foreground border rounded-2xl p-6 space-y-4 shadow-lg relative overflow-hidden"
           >
-            {/* Futuristic background glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-cyan-500/5 rounded-2xl pointer-events-none" />
-            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent pointer-events-none" />
-            
             {/* Header */}
             <div className="text-center space-y-3">
               <div className="flex items-center justify-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                  <img 
-                    src="https://psdn.ai/icon.png?07720b992e581016" 
-                    alt="PSDN"
-                    className="w-6 h-6 rounded-full object-cover"
-                  />
+                <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
+                  <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white">
+                    <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                    <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                    <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                  </svg>
                 </div>
                 <div className="text-left">
                   <h1 className="text-2xl font-bold">Mint PSDN L1</h1>
@@ -105,12 +1554,12 @@ export default function Home() {
               <div className="bg-card text-card-foreground border rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                      <img 
-                        src="https://psdn.ai/icon.png?07720b992e581016" 
-                        alt="PSDN"
-                        className="w-4 h-4 rounded-full object-cover"
-                      />
+                    <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center">
+                      <svg viewBox="0 0 37 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
+                        <path d="M9.49163 10.3924L9.8969 14.2651C10.1629 16.8048 12.1699 18.8117 14.7095 19.0777L18.5823 19.483L14.7095 19.8882C12.1699 20.1543 10.1629 22.1612 9.8969 24.7008L9.49163 28.5736L9.08637 24.7008C8.82036 22.1612 6.81341 20.1543 4.2738 19.8882L0.400391 19.4836L4.27318 19.0783C6.81278 18.8123 8.81974 16.8054 9.08575 14.2658L9.49163 10.3924Z" fill="currentColor"/>
+                        <path d="M18.5639 1.38114L18.9692 5.25393C19.2352 7.79353 21.2421 9.80048 23.7817 10.0665L27.6545 10.4718L23.7817 10.877C21.2421 11.143 19.2352 13.15 18.9692 15.6896L18.5639 19.5624L18.1586 15.6896C17.8926 13.15 15.8857 11.143 13.3461 10.877L9.47266 10.4724L13.3454 10.0671C15.885 9.80111 17.892 7.79415 18.158 5.25455L18.5639 1.38114Z" fill="currentColor"/>
+                        <path d="M27.5287 10.392L27.934 14.2648C28.2 16.8044 30.207 18.8113 32.7466 19.0773L36.6194 19.4826L32.7466 19.8879C30.207 20.1539 28.2 22.1608 27.934 24.7004L27.5287 28.5732L27.1235 24.7004C26.8575 22.1608 24.8505 20.1539 22.3109 19.8879L18.4375 19.4832L22.3103 19.078C24.8499 18.812 26.8568 16.805 27.1229 14.2654L27.5287 10.392Z" fill="currentColor"/>
+                      </svg>
                     </div>
                     <div>
                       <div className="text-foreground font-medium">PSDN L1</div>
@@ -122,8 +1571,18 @@ export default function Home() {
                 <div className="space-y-2">
                   <input
                     type="text"
+                    inputMode="decimal"
                     value={mintAmount}
-                    onChange={(e) => setMintAmount(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Allow empty string, numbers, and one decimal point
+                      if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                        setMintAmount(value);
+                      }
+                    }}
+                    onBlur={() => {
+                      setMintAmount(formatAmountOnBlur(mintAmount));
+                    }}
                     placeholder="0"
                     className="text-2xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
                   />
@@ -131,48 +1590,100 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Mint Button */}
-              <Button
-                onClick={handleMint}
-                disabled={!address || isPending || !mintAmount}
-                className="w-full mt-6"
-                variant="outline"
-              >
-                {isPending ? "Minting..." : isSuccess ? "Minted!" : "Mint"}
-              </Button>
+              {/* Network Check and Mint Button */}
+              {!address ? (
+                <button
+                  onClick={() => openConnectModal?.()}
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Connect Wallet
+                </button>
+              ) : !isOnL1 ? (
+                <button
+                  onClick={handleSwitchToL1}
+                  disabled={isSwitchingChain}
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSwitchingChain ? "Switching..." : "Switch to Poseidon Devnet (L1)"}
+                </button>
+              ) : showMintSuccess ? (
+                <motion.button
+                  disabled
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold rounded-lg overflow-hidden relative border border-blue-300/30"
+                  initial={{ scale: 1 }}
+                  animate={{ 
+                    scale: [1, 1.02, 1],
+                  }}
+                  transition={{
+                    duration: 3,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <motion.div
+                    className="absolute inset-0"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.15), rgba(59, 130, 246, 0.1))',
+                      backgroundSize: '300% 100%',
+                    }}
+                    initial={{ backgroundPosition: '0% 0%' }}
+                    animate={{ 
+                      backgroundPosition: ['0% 0%', '100% 0%', '200% 0%', '0% 0%']
+                    }}
+                    transition={{
+                      duration: 3,
+                      ease: "easeInOut",
+                    }}
+                  />
+                  <motion.div
+                    className="absolute inset-0 opacity-50"
+                    style={{
+                      background: 'radial-gradient(circle at center, rgba(139, 92, 246, 0.3), transparent)',
+                    }}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ 
+                      scale: [0.8, 1.2, 0.8],
+                      opacity: [0, 0.5, 0],
+                    }}
+                    transition={{
+                      duration: 3,
+                      ease: "easeInOut",
+                    }}
+                  />
+                  <motion.span 
+                    className="relative z-10 text-gray-200 font-semibold"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    Confirmed
+                  </motion.span>
+                </motion.button>
+              ) : (
+                <button
+                  onClick={handleMint}
+                  disabled={isPending || isMintConfirming || !mintAmount}
+                  className="w-full flex items-center justify-center px-4 py-3 mt-6 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isPending || isMintConfirming ? "Confirming..." : "Mint"}
+                </button>
+              )}
 
-              {/* Status Messages */}
-              {error && (
+              {/* Status Messages - Only show non-cancelled errors */}
+              {error && formatTransactionError(error) && (
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <p className="text-destructive text-sm font-medium">
-                    Error: {error.message}
+                    Error: {formatTransactionError(error)}
                   </p>
                 </div>
               )}
-              
-              {isSuccess && (
-                <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-green-700 dark:text-green-300 text-sm font-medium">
-                    Successfully minted {mintAmount} PSDN L1 tokens!
-                  </span>
-                </div>
-              )}
 
-              {/* Wallet Connection Status */}
-              {!address && (
-                <div className="flex items-center space-x-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span className="text-amber-700 dark:text-amber-300 text-sm font-medium">
-                    Please connect your wallet to mint tokens
-                  </span>
-                </div>
-              )}
             </div>
 
           </motion.div>
         </div>
       )}
-    </main>
+        </div>
+      </main>
+    </>
   );
 }
