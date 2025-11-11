@@ -56,13 +56,6 @@ export default function Home() {
     hash: mintTxHash as `0x${string}`,
     chainId: CHAIN_IDS.L1,
   });
-  
-  const { data: poseidonToken } = useReadSubnetControlPlanePoseidonToken({
-    query: { 
-      enabled: isOnL2,
-    },
-    chainId: CHAIN_IDS.L2,
-  });
 
   const { 
     writeContract: writeApproveStake, 
