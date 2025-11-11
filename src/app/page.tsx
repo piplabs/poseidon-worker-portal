@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BridgeInterface } from "@/components/bridge-interface";
 import { Navbar } from "@/components/navbar";
 import { PendingTransactionsTab } from "@/components/pending-transactions-tab";
@@ -36,6 +36,12 @@ export default function Home() {
   const [selectedQueueName, setSelectedQueueName] = useState("");
   const [queues, setQueues] = useState<string[]>([]);
   const [showMintSuccess, setShowMintSuccess] = useState(false);
+  
+  // Track approval state for worker registration (same pattern as bridge)
+  const shouldContinueAfterStakeApproval = useRef(false);
+  const isRequestingStakeApproval = useRef(false);
+  const lastProcessedStakeApprovalHash = useRef<string | null>(null);
+  const lastStakeApprovalTimestamp = useRef<number>(0);
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -89,12 +95,12 @@ export default function Home() {
   ] as const;
   
   const { data: stakeAllowance, refetch: refetchStakeAllowance } = useReadContract({
-    address: poseidonToken,
+    address: CONTRACT_ADDRESSES.PSDN_L2 as `0x${string}`,
     abi: erc20Abi,
     functionName: 'allowance',
-    args: address && poseidonToken ? [address, CONTRACT_ADDRESSES.SUBNET_TREASURY] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.SUBNET_TREASURY] : undefined,
     query: { 
-      enabled: !!address && !!poseidonToken,
+      enabled: !!address && isOnL2,
       refetchInterval: 10000,
     },
     chainId: CHAIN_IDS.L2,
@@ -105,19 +111,69 @@ export default function Home() {
     chainId: CHAIN_IDS.L2,
   });
 
+  // Handle approval success - automatically continue with worker registration
+  // Same pattern as bridge interface
   useEffect(() => {
-    if (isApproveStakeSuccess) {
-      refetchStakeAllowance();
-      
-      if (stakeAmount && workerCapacity && selectedQueueName) {
-        const requiredStake = parseInt(workerCapacity) * 100;
-        if (requiredStake <= parseFloat(stakeAmount)) {
-          handleRegisterWorker();
-        }
+    if (isApproveStakeSuccess && shouldContinueAfterStakeApproval.current && approveStakeTxHash) {
+      // Check if we've already processed this approval
+      if (lastProcessedStakeApprovalHash.current === approveStakeTxHash) {
+        return;
       }
+      
+      // Mark this approval as processed
+      lastProcessedStakeApprovalHash.current = approveStakeTxHash;
+      lastStakeApprovalTimestamp.current = Date.now();
+      
+      // Refetch allowance and wait for it to update with proper polling
+      const refetchAndContinue = async () => {
+        // Wait a bit for blockchain state to propagate
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Poll the allowance until it updates (up to 15 seconds)
+        const maxAttempts = 15;
+        let attempts = 0;
+        let allowanceUpdated = false;
+        
+        while (attempts < maxAttempts && !allowanceUpdated) {
+          const result = await refetchStakeAllowance();
+          
+          // Check if allowance has increased (approval successful)
+          if (result.data && result.data > BigInt(0)) {
+            allowanceUpdated = true;
+            break;
+          }
+          
+          // Wait another second for the state to update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          attempts++;
+        }
+        
+        // Reset flags
+        shouldContinueAfterStakeApproval.current = false;
+        isRequestingStakeApproval.current = false;
+        
+        // Only proceed if allowance was updated or we've waited long enough
+        if (allowanceUpdated || attempts >= maxAttempts) {
+          // Additional delay to ensure state is fully updated, then re-trigger registration
+          setTimeout(() => {
+            handleRegisterWorker();
+          }, 500);
+        }
+      };
+      
+      refetchAndContinue();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproveStakeSuccess, refetchStakeAllowance]);
+  }, [isApproveStakeSuccess, approveStakeTxHash]);
+  
+  // Clear approval request flag if approval error occurs
+  useEffect(() => {
+    if (approveStakeError && isRequestingStakeApproval.current) {
+      isRequestingStakeApproval.current = false;
+      shouldContinueAfterStakeApproval.current = false;
+    }
+  }, [approveStakeError]);
   
   // Show success animation when mint is confirmed
   useEffect(() => {
@@ -207,11 +263,21 @@ export default function Home() {
     },
     chainId: CHAIN_IDS.L2,
   });
+  // Initialize rewardEpochId with current epoch when it becomes available
+  useEffect(() => {
+    if (currentEpochId && !rewardEpochId) {
+      setRewardEpochId(currentEpochId.toString());
+    }
+  }, [currentEpochId, rewardEpochId]);
+
+  // Use rewardEpochId if provided, otherwise use currentEpochId
+  const epochToQuery = rewardEpochId ? BigInt(rewardEpochId) : currentEpochId;
+  
   const { data: workerRewards, refetch: refetchWorkerRewards } = useReadSubnetControlPlaneGetWorkerRewards({
-    args: address && currentEpochId ? [address, currentEpochId] : undefined,
+    args: address && epochToQuery !== undefined ? [address, epochToQuery] : undefined,
     query: { 
-      enabled: !!address && isOnL2 && !!currentEpochId,
-      refetchInterval: 5000,
+      enabled: !!address && isOnL2 && epochToQuery !== undefined,
+      refetchInterval: 1000, // Poll every 1 second to update rewards based on entered epoch
     },
     chainId: CHAIN_IDS.L2,
   });
@@ -278,28 +344,6 @@ export default function Home() {
     }
   }, [isMintConfirmed, mintTxHash]);
 
-  const handleApproveStake = async () => {
-    if (!address) {
-      openConnectModal?.();
-      return;
-    }
-
-    if (!poseidonToken) {
-      return;
-    }
-    
-    try {
-      await writeApproveStake({
-        address: poseidonToken,
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [CONTRACT_ADDRESSES.SUBNET_TREASURY, BigInt(MAX_UINT256)],
-        chainId: CHAIN_IDS.L2,
-      });
-    } catch (err) {
-      isUserRejectedError(err);
-    }
-  };
 
   const handleMinStakeClick = () => {
     if (minimumStake) {
@@ -318,7 +362,14 @@ export default function Home() {
       openConnectModal?.();
       return;
     }
-    if (!stakeAmount || !workerCapacity) return;
+    if (!stakeAmount || !workerCapacity || !selectedQueueName) {
+      return;
+    }
+    
+    // Prevent triggering if approval is already in progress
+    if (isApproveStakePending || isRequestingStakeApproval.current) {
+      return;
+    }
     
     try {
       const amount = parseUnits(stakeAmount, 18);
@@ -329,6 +380,43 @@ export default function Home() {
         return;
       }
       
+      // Check balance first
+      const currentBalance = psdnL2Balance || BigInt(0);
+      if (currentBalance < amount) {
+        console.error('Insufficient PSDN balance on L2');
+        return;
+      }
+      
+      // Check if approval is needed (same pattern as bridge)
+      const needsApproval = !stakeAllowance || stakeAllowance < amount;
+      
+      if (needsApproval) {
+        // Guard: Prevent requesting approval if one was just processed (within last 10 seconds)
+        const timeSinceLastApproval = Date.now() - lastStakeApprovalTimestamp.current;
+        if (timeSinceLastApproval < 10000) {
+          console.log('Approval was just processed, waiting for allowance to update...');
+          return;
+        }
+        
+        // Set flags to auto-continue after approval and prevent duplicate requests
+        shouldContinueAfterStakeApproval.current = true;
+        isRequestingStakeApproval.current = true;
+        
+        // Approve max amount to avoid future approvals
+        // Use PSDN_L2 address directly (same as bridge pattern)
+        await writeApproveStake({
+          address: CONTRACT_ADDRESSES.PSDN_L2 as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'approve',
+          args: [CONTRACT_ADDRESSES.SUBNET_TREASURY, BigInt(MAX_UINT256)],
+          chainId: CHAIN_IDS.L2,
+        });
+        
+        // Note: The actual registration will happen automatically after approval confirms
+        return;
+      }
+      
+      // If we have approval, proceed with registration
       await writeRegisterWorker({
         args: [amount, capacity, selectedQueueName],
       });
@@ -1054,7 +1142,7 @@ export default function Home() {
                           </p>
                         </div>
 
-                        {/* Network Check, Approval, and Register Button */}
+                        {/* Network Check and Register Button */}
                         {!address ? (
                           <button
                             onClick={() => openConnectModal?.()}
@@ -1071,34 +1159,25 @@ export default function Home() {
                             {isSwitchingChain ? "Switching..." : "Switch to L2"}
                           </button>
                         ) : (
-                          <>
-                            {/* Check if approval is needed */}
-                            {stakeAmount && workerCapacity && workerCapacity !== "0" && selectedQueueName && stakeAllowance !== undefined && stakeAllowance < parseUnits(stakeAmount, 18) ? (
-                              <button
-                                onClick={handleApproveStake}
-                                disabled={isApproveStakePending || (!!approveStakeTxHash && !isApproveStakeSuccess)}
-                                className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {(isApproveStakePending || (approveStakeTxHash && !isApproveStakeSuccess)) ? "Approving..." : "Approve Tokens"}
-                              </button>
-                            ) : (
-                              <button
-                                onClick={handleRegisterWorker}
-                                disabled={
-                                  isRegisterWorkerPending || 
-                                  isRegisterWorkerConfirming || 
-                                  stakeAmount === "" || 
-                                  workerCapacity === "" || 
-                                  workerCapacity === "0" ||
-                                  selectedQueueName === "" ||
-                                  (!!workerCapacity && !!stakeAmount && parseInt(workerCapacity) * 100 > parseFloat(stakeAmount))
-                                }
-                                className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {(isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
-                              </button>
-                            )}
-                          </>
+                          <button
+                            onClick={handleRegisterWorker}
+                            disabled={
+                              isRegisterWorkerPending || 
+                              isRegisterWorkerConfirming ||
+                              isApproveStakePending ||
+                              (!!approveStakeTxHash && !isApproveStakeSuccess) ||
+                              stakeAmount === "" || 
+                              workerCapacity === "" || 
+                              workerCapacity === "0" ||
+                              selectedQueueName === "" ||
+                              (!!workerCapacity && !!stakeAmount && parseInt(workerCapacity) * 100 > parseFloat(stakeAmount))
+                            }
+                            className="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-gray-400 bg-gray-800/30 hover:bg-gray-700/40 border border-gray-700/30 hover:border-gray-600/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isApproveStakePending || (approveStakeTxHash && !isApproveStakeSuccess) ? "Approving..." : 
+                             (isRegisterWorkerPending || isRegisterWorkerConfirming) ? "Registering..." : 
+                             isRegisterWorkerSuccess ? "Registered!" : "Register Worker"}
+                          </button>
                         )}
 
                         {/* Status Messages */}
@@ -1156,6 +1235,11 @@ export default function Home() {
                       <div className="bg-muted/30 rounded-xl p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">Epoch ID</span>
+                          {currentEpochId && (
+                            <span className="text-xs text-muted-foreground">
+                              Current: {currentEpochId.toString()}
+                            </span>
+                          )}
                         </div>
                         <input
                           type="text"
@@ -1171,6 +1255,9 @@ export default function Home() {
                           placeholder={currentEpochId ? currentEpochId.toString() : "Enter epoch ID"}
                           className="text-3xl font-bold text-foreground border-none shadow-none focus:outline-none p-0 bg-transparent w-full"
                         />
+                        <p className="text-xs text-gray-500">
+                          Enter any epoch ID to view and claim rewards from that epoch
+                        </p>
                       </div>
 
                       {/* Claim Button */}
