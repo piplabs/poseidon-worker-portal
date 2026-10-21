@@ -17,7 +17,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.542.0",
     "motion": "^12.23.14",
-    "next": "15.5.8",
+    "next": "15.5.28",
     "react": "19.1.2",
     "react-dom": "19.1.2",
     "tailwind-merge": "^3.3.1",
@@ -32,11 +32,12 @@
     "@types/react-dom": "^19",
     "@wagmi/cli": "^2.5.1",
     "eslint": "^9",
-    "eslint-config-next": "15.5.7",
+    "eslint-config-next": "15.5.28",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
   "overrides": {
-    "next": "15.5.8"
+    "next": "15.5.28",
+    "sharp": "^0.35.5"
   }
 }
